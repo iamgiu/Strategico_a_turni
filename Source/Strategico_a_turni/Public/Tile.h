@@ -1,0 +1,49 @@
+// Fill out your copyright notice in the Description page of Project Settings.
+
+#pragma once
+
+#include "CoreMinimal.h"
+#include "GameFramework/Actor.h"
+#include "Tile.generated.h"
+
+//If the cell is empty or occupied
+UENUM()
+enum classETileStatus : uint8
+{
+	EMPTY UMETA(DisplayName = "Empty"),
+	OCCUPIED UMETA(DisplayName = "Occupied"),
+};
+
+UCLASS()
+class STRATEGICO_A_TURNI_API ATile : public AActor
+{
+	GENERATED_BODY()
+	
+public:	
+	// Sets default values for this actor's properties
+	ATile();
+
+	//set the player owner and the status of a tile 
+	void SetTileStatus(const int32 TileOwner, const ETileStatus TileStatus);
+
+	//get the tile status
+	ETileStatus GetTileStatus();
+
+	//get the tile owner
+	int32 GetOwner();
+
+	//set the (x,y) position
+	void SetGridPosition(const double InX, const double InY);
+
+	//get the (x,y) position 
+	FVector2D GetGridPosition();
+
+protected:
+	// Called when the game starts or when spawned
+	virtual void BeginPlay() override;
+
+//public:	
+	// Called every frame
+	//virtual void Tick(float DeltaTime) override;
+
+};
