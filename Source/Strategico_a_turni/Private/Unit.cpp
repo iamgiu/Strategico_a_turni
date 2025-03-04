@@ -9,6 +9,12 @@ AUnit::AUnit()
 	// Set this actor to call Tick() every frame.  You can turn this off to improve performance if you don't need it.
 	PrimaryActorTick.bCanEverTick = false;
 
+	//Scene = CreateDefaultSubobject<USceneComponent>(TEXT("Scene"));
+	StaticMeshComponent = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("StaticMeshComponent"));
+
+	//SetRootComponent(Scene);
+	//StaticMeshComponent->SetupAttachment(Scene);
+
 }
 
 // Called when the game starts or when spawned

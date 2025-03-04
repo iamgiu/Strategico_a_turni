@@ -10,11 +10,23 @@
 UCLASS()
 class STRATEGICO_A_TURNI_API AUnit : public APawn
 {
-	GENERATED_BODY()
- 
+    GENERATED_BODY()
+
 public:
     // Sets default values for this actor's properties
     AUnit();
+
+    //Reference to the material interface for the piece when is normal
+    //UPROPERTY(EditAnywhere, Category = "Materials")
+    //UMaterialInterface* BaseMaterial;
+
+    // Reference to  material interface for the piece when is selected
+    //UPROPERTY(EditAnywhere, Category = "Materials")
+    //UMaterialInterface* SelectedMaterial;
+
+    //void ShowSelected();
+
+    //void UnshowSelected();
 
 protected:
 
@@ -45,7 +57,14 @@ protected:
     //Function for the Attack of the unit
     //void Attack(AUnit* Target);
 
-public:	
+    //Reference to the static mesh component
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components");
+    UStaticMeshComponent* StaticMeshComponent;
+
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Unit")
+    FVector2D UnitGridPosition;
+
+public:
     // Called every frame
 //	virtual void Tick(float DeltaTime) override;
 

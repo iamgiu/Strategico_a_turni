@@ -2,6 +2,7 @@
 
 
 #include "GridManager.h"
+#include "Unit.h"
 
 // Sets default values
 AGridManager::AGridManager()
@@ -33,6 +34,7 @@ void AGridManager::BeginPlay()
 {
 	Super::BeginPlay();
 	GenerateField();
+
 }
 
 //void AGridManager::ResetField()
