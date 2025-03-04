@@ -59,8 +59,8 @@ void AGridManager::GenerateField()
 		{
 			FVector Location = AGridManager::GetRelativeLocationByXYPosition(IndexX, IndexY);
 			ATile* Obj = GetWorld()->SpawnActor<ATile>(TileClass, Location, FRotator::ZeroRotator);
-			const float TileScale = TileSize / 100.f;
-			const float Zscaling = 0.2f;
+			const float TileScale = TileSize / 100.0f;
+			const float Zscaling = 0.01f;
 			Obj->SetActorScale3D(FVector(TileScale, TileScale, Zscaling));
 			Obj->SetGridPosition(IndexX, IndexY);
 			TileArray.Add(Obj);
