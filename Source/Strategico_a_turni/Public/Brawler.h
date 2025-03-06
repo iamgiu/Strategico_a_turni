@@ -4,17 +4,17 @@
 
 #include "CoreMinimal.h"
 #include "Unit.h"
-#include "Sniper.generated.h"
+#include "Brawler.generated.h"
+
 
 UCLASS()
-
-class STRATEGICO_A_TURNI_API ASniper : public AUnit
+class STRATEGICO_A_TURNI_API ABrawler : public AUnit
 {
-    GENERATED_BODY()
+	GENERATED_BODY()
 
 public:
     // Costruttore
-    ASniper();
+    ABrawler();
 
 protected:
     // Sovrascrittura dei valori per Sniper

@@ -13,13 +13,15 @@ class USaT_PlayerInterface : public UInterface
 	GENERATED_BODY()
 };
 
-/**
- * 
- */
 class STRATEGICO_A_TURNI_API ISaT_PlayerInterface
 {
 	GENERATED_BODY()
 
 	// Add interface functions to this class. This is the class that will be inherited to implement this interface.
 public:
+	int32 PlayerNumber;
+
+	virtual void OnTurn() {};
+	virtual void OnWin() {};
+	virtual void OnLose() {};
 };

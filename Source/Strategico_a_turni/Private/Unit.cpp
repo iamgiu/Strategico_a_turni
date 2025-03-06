@@ -31,7 +31,7 @@ void AUnit::BeginPlay()
 	//il Target subisce il danno comando + testo in cui si scrive quanto danno fa
 //}
 
-void AUnit::DamageTaken(int Damage)
+void AUnit::DamageTaken(int32 Damage)
 {
 	Hp -= Damage;
 

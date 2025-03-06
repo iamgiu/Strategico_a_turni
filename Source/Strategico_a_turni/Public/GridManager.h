@@ -12,7 +12,7 @@ class STRATEGICO_A_TURNI_API AGridManager : public AActor
 {
 
 	GENERATED_BODY()
-	
+
 public:
 	// keeps track of tiles
 	UPROPERTY(Transient)
