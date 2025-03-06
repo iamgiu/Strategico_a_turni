@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "Tile.h"
+#include "SaT_GameMode.h"
 #include "GameFramework/Actor.h"
 #include "GridManager.generated.h"
 

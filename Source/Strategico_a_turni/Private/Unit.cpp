@@ -2,6 +2,7 @@
 
 
 #include "Unit.h"
+#include "SaT_GameMode.h"
 
 // Sets default values
 AUnit::AUnit()

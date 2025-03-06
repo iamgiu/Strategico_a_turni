@@ -34,6 +34,8 @@ void ASaT_GameMode::CoinToss()
     {
         if (ASaT_PlayerController* SaT_Player = Cast<ASaT_PlayerController>(Player))
         {
+            UE_LOG(LogTemp, Warning, TEXT("Parte per primo: %s"), bPlayerFirst ? TEXT("Giocatore") : TEXT("AI"));
+
             // Se il giocatore è il primo, inizia subito il piazzamento
             if (bPlayerFirst)
             {
