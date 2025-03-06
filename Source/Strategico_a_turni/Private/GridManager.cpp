@@ -3,6 +3,7 @@
 
 #include "GridManager.h"
 #include "Unit.h"
+#include "SaT_GameMode.h"
 
 // Sets default values
 AGridManager::AGridManager()
@@ -157,6 +158,82 @@ bool AGridManager::AllEqual(const TArray<int32>& Array) const
 	}
 
 	return true;
+}
+
+// Verifica se una cella è occupata
+bool AGridManager::IsCellOccupied(int32 GridX, int32 GridY)
+{
+	// Verifica se le coordinate sono valide
+	if (!IsValidPosition(FVector2D(GridX, GridY)))
+	{
+		return true; // Considera le posizioni non valide come occupate
+	}
+
+	// Trova il tile corrispondente
+	FVector2D Position(GridX, GridY);
+	if (TileMap.Contains(Position))
+	{
+		ATile* Tile = TileMap[Position];
+		if (Tile)
+		{
+			// Verifica se il tile è occupato
+			return Tile->bIsOccupied;
+		}
+	}
+
+	return false;
+}
+
+// Occupa una cella con un'unità
+void AGridManager::OccupyCell(int32 GridX, int32 GridY, AUnit* Unit)
+{
+	// Verifica se le coordinate sono valide
+	if (!IsValidPosition(FVector2D(GridX, GridY)))
+	{
+		return;
+	}
+
+	// Trova il tile corrispondente
+	FVector2D Position(GridX, GridY);
+	if (TileMap.Contains(Position))
+	{
+		ATile* Tile = TileMap[Position];
+		if (Tile)
+		{
+			// Segna il tile come occupato
+			Tile->bIsOccupied = true;
+
+			// Memorizza il riferimento all'unità (aggiungi questa proprietà a ATile)
+			Tile->OccupyingUnit = Unit;
+
+			// Aggiorna anche l'unità con la sua posizione sulla griglia (aggiungi queste proprietà a AUnit)
+			if (Unit)
+			{
+				Unit->GridX = GridX;
+				Unit->GridY = GridY;
+
+				// Posiziona l'unità nel mondo
+				FVector WorldLocation = GetWorldLocationFromGrid(GridX, GridY);
+				Unit->SetActorLocation(WorldLocation);
+			}
+		}
+	}
+}
+
+// Ottieni la posizione del mondo dalle coordinate della griglia
+FVector AGridManager::GetWorldLocationFromGrid(int32 GridX, int32 GridY)
+{
+	// Calcola la posizione relativa 
+	FVector RelativeLocation = GetRelativeLocationByXYPosition(GridX, GridY);
+
+	// Converti la posizione relativa in una posizione globale
+	FVector WorldLocation = GetActorTransform().TransformPosition(RelativeLocation);
+
+	// Aggiungi un offset verticale per posizionare l'unità sulla superficie del tile
+	// Presuppone che l'origine dell'unità sia alla sua base
+	WorldLocation.Z += TileSize * 0.5f;
+
+	return WorldLocation;
 }
 
 // Called every frame

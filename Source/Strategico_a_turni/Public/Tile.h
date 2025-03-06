@@ -38,6 +38,21 @@ public:
 	//get the (x,y) position 
 	FVector2D GetGridPosition();
 
+	// Flag per indicare se il tile è occupato
+	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "Grid")
+	bool bIsOccupied;
+
+	// Riferimento all'unità che occupa questo tile
+	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "Grid")
+	class AUnit* OccupyingUnit;
+
+	// Coordinate del tile nella griglia
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Grid")
+	int32 GridX;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Grid")
+	int32 GridY;
+
 protected:
 	// Called when the game starts or when spawned
 	virtual void BeginPlay() override;

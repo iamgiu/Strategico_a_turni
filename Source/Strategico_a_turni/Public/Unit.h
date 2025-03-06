@@ -16,6 +16,13 @@ public:
     // Sets default values for this actor's properties
     AUnit();
 
+    // Coordinate dell'unità sulla griglia
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Grid")
+    int32 GridX;
+
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Grid")
+    int32 GridY;
+
     //Reference to the material interface for the piece when is normal
     //UPROPERTY(EditAnywhere, Category = "Materials")
     //UMaterialInterface* BaseMaterial;

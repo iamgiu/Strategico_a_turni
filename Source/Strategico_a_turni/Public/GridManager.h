@@ -81,6 +81,18 @@ public:
 	// check if a line contains all equal elements
 	bool AllEqual(const TArray<int32>& Array) const;
 
+	// Verifica se una cella è occupata
+	UFUNCTION(BlueprintCallable, Category = "Grid")
+	bool IsCellOccupied(int32 GridX, int32 GridY);
+
+	// Occupa una cella con un'unità
+	UFUNCTION(BlueprintCallable, Category = "Grid")
+	void OccupyCell(int32 GridX, int32 GridY, AUnit* Unit);
+
+	// Ottieni la posizione del mondo dalle coordinate della griglia
+	UFUNCTION(BlueprintCallable, Category = "Grid")
+	FVector GetWorldLocationFromGrid(int32 GridX, int32 GridY);
+
 	//public:	
 	//	// Called every frame
 	//	virtual void Tick(float DeltaTime) override;

@@ -13,11 +13,10 @@ class STRATEGICO_A_TURNI_API ABrawler : public AUnit
 	GENERATED_BODY()
 
 public:
-    // Costruttore
     ABrawler();
 
 protected:
-    // Sovrascrittura dei valori per Sniper
+
     virtual void BeginPlay() override;
 
 };
