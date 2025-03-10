@@ -5,7 +5,6 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Pawn.h"
-#include "SaT_GameMode.h" 
 #include "Unit.generated.h"
 
 UCLASS()

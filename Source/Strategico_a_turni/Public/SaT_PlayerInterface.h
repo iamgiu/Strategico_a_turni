@@ -4,7 +4,6 @@
 
 #include "CoreMinimal.h"
 #include "UObject/Interface.h"
-#include "SaT_GameMode.h"
 #include "SaT_GameInstance.h"
 #include "SaT_PlayerInterface.generated.h"
 
