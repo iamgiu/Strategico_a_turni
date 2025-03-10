@@ -1,73 +1,38 @@
 // Fill out your copyright notice in the Description page of Project Settings.
 
+
 #pragma once
 
 #include "CoreMinimal.h"
 #include "GameFramework/PlayerController.h"
-#include "Unit.h"
-#include "GridManager.h"
-#include "Tile.h"
-#include "SaT_GameMode.h"
+#include "InputActionValue.h"
 #include "SaT_PlayerController.generated.h"
+
+class UInputMappingContext;
+class UInputAction;
+class ASaT_HumanPlayer;
 
 UCLASS()
 class STRATEGICO_A_TURNI_API ASaT_PlayerController : public APlayerController
 {
-	GENERATED_BODY()
+    GENERATED_BODY()
 
 public:
-    
-    ASaT_PlayerController();
 
-    UFUNCTION(BlueprintCallable, Category = "Game")
-    void StartPlacingUnits();
+	ASaT_PlayerController();
 
-    // Funzione per piazzare lo Sniper
-    UFUNCTION(BlueprintCallable, Category = "Game")
-    bool PlaceSniper(int32 GridX, int32 GridY);
+	UPROPERTY(EditAnywhere, Category = Input)
+	UInputMappingContext* SaTContext;
 
-    // Funzione per piazzare il Brawler
-    UFUNCTION(BlueprintCallable, Category = "Game")
-    bool PlaceBrawler(int32 GridX, int32 GridY);
 
-    // Funzione per confermare il piazzamento
-    UFUNCTION(BlueprintCallable, Category = "Game")
-    void ConfirmPlacement();
+	UPROPERTY(EditAnywhere, Category = Input)
+	UInputAction* ClickAction;
+
+	void ClickOnGrid(const FInputActionValue& Value);
 
 protected:
 
-    virtual void BeginPlay() override;
+	virtual void BeginPlay() override;
 
-    virtual void SetupInputComponent() override;
-
-    // Gestione dell'input per selezionare la cella
-    void HandleGridSelection();
-
-public:
-
-    UPROPERTY()
-    class AGridManager* GridManager;
-
-    // Unità da piazzare
-    UPROPERTY()
-    AUnit* SniperUnit;
-
-    UPROPERTY()
-    AUnit* BrawlerUnit;
-
-    // Stato attuale del piazzamento
-    enum EPlacementState
-    {
-        NotPlacing,
-        PlacingSniper,
-        PlacingBrawler,
-        PlacementComplete
-    };
-
-    EPlacementState CurrentPlacementState;
-
-    // Coordinated dell'unità selezionata attualmente
-    int32 SelectedGridX;
-    int32 SelectedGridY;
-
+	virtual void SetupInputComponent() override;
 };

@@ -5,7 +5,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Pawn.h"
-#include "SaT_GameMode.h"
+#include "SaT_GameMode.h" 
 #include "Unit.generated.h"
 
 UCLASS()
@@ -24,23 +24,46 @@ public:
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Grid")
     int32 GridY;
 
-    //Reference to the material interface for the piece when is normal
-    //UPROPERTY(EditAnywhere, Category = "Materials")
-    //UMaterialInterface* BaseMaterial;
+    // Indica se l'unità appartiene al giocatore o all'AI
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Team")
+    bool bIsPlayerUnit;
 
-    // Reference to  material interface for the piece when is selected
-    //UPROPERTY(EditAnywhere, Category = "Materials")
-    //UMaterialInterface* SelectedMaterial;
+    // Reference to the material interface for the piece when is normal
+    UPROPERTY(EditAnywhere, Category = "Materials")
+    UMaterialInterface* BaseMaterial;
 
-    //void ShowSelected();
+    // Reference to material interface for the piece when is selected
+    UPROPERTY(EditAnywhere, Category = "Materials")
+    UMaterialInterface* SelectedMaterial;
 
-    //void UnshowSelected();
+    // Visual feedback when unit is selected
+    UFUNCTION(BlueprintCallable, Category = "Visual")
+    void ShowSelected();
+
+    UFUNCTION(BlueprintCallable, Category = "Visual")
+    void UnshowSelected();
+
+    // Function for Damage Taken by the Unit
+    UFUNCTION(BlueprintCallable, Category = "Combat")
+    virtual void DamageTaken(int32 Damage);
+
+    // Function to verify that the unit is alive
+    UFUNCTION(BlueprintCallable, Category = "Combat")
+    bool IsAlive() const;
+
+    // Function for the movement of the unit
+    UFUNCTION(BlueprintCallable, Category = "Movement")
+    virtual bool Move(int32 NewGridX, int32 NewGridY);
+
+    // Function for the Attack of the unit
+    UFUNCTION(BlueprintCallable, Category = "Combat")
+    virtual bool Attack(AUnit* Target);
 
 protected:
-
     // Called when the game starts or when spawned
     virtual void BeginPlay() override;
 
+    // Stats
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stat")
     int32 Movement;
 
@@ -59,30 +82,26 @@ protected:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stat")
     int32 Hp;
 
-    //Function for the movement of the unit
-    //void Move(FVector Destination);
-
-    //Function for the Attack of the unit
-    //void Attack(AUnit* Target);
-
-    //Reference to the static mesh component
-    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components");
+    // Reference to the static mesh component
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
     UStaticMeshComponent* StaticMeshComponent;
 
+    // Position on the grid
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Unit")
     FVector2D UnitGridPosition;
 
+    // Calculate damage with random range between min and max
+    UFUNCTION(BlueprintCallable, Category = "Combat")
+    int32 CalculateDamage() const;
+
+    // Check if target is within attack range
+    UFUNCTION(BlueprintCallable, Category = "Combat")
+    bool IsTargetInRange(const AUnit* Target) const;
+
 public:
     // Called every frame
-//	virtual void Tick(float DeltaTime) override;
+    // virtual void Tick(float DeltaTime) override;
 
-    //Function for Damage Taken by the Unit
-    void DamageTaken(int32 Damage);
-
-    //Function to verify that the unit is alive
-    bool IsAlive() const;
-
-// Called to bind functionality to input
-    //virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;
-
+    // Called to bind functionality to input
+    // virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;
 };

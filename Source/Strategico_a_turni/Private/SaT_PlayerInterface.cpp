@@ -2,5 +2,3 @@
 
 
 #include "SaT_PlayerInterface.h"
-
-// Add default functionality here for any ISaT_PlayerInterface functions that are not pure virtual.

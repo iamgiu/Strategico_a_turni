@@ -7,6 +7,9 @@
 #include "GameFramework/GameMode.h"
 #include "SaT_GameMode.generated.h"
 
+class AGridManager;
+class ASaT_HumanPlayer;
+
 UCLASS()
 class STRATEGICO_A_TURNI_API ASaT_GameMode : public AGameMode
 {
@@ -24,4 +27,16 @@ public:
     // Evento chiamato dopo il lancio della moneta
     UFUNCTION(BlueprintImplementableEvent, Category = "Game")
     void OnCoinTossComplete(bool bIsPlayerFirst);
+
+    // Riferimento al GridManager
+    UPROPERTY(Transient)
+    AGridManager* GridManager;
+
+    // Riferimento al giocatore umano
+    UPROPERTY(Transient)
+    ASaT_HumanPlayer* HumanPlayer;
+
+    // Numero di unità iniziali per giocatore
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Game Rules")
+    int32 InitialUnitsCount = 5;
 };

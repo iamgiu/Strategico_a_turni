@@ -4,24 +4,65 @@
 
 #include "CoreMinimal.h"
 #include "UObject/Interface.h"
+#include "SaT_GameMode.h"
+#include "SaT_GameInstance.h"
 #include "SaT_PlayerInterface.generated.h"
 
-// This class does not need to be modified.
+enum class EUnitType : uint8
+{
+    Sniper,
+    Brawler
+};
+
+enum class EPlayerType : uint8
+{
+    Human,
+    AI
+};
+
+class ASaT_GameField;
+class AUnit;
+
 UINTERFACE(MinimalAPI)
 class USaT_PlayerInterface : public UInterface
 {
-	GENERATED_BODY()
+    GENERATED_BODY()
 };
 
 class STRATEGICO_A_TURNI_API ISaT_PlayerInterface
 {
-	GENERATED_BODY()
 
-	// Add interface functions to this class. This is the class that will be inherited to implement this interface.
+    GENERATED_BODY()
+ 
 public:
-	int32 PlayerNumber;
 
-	virtual void OnTurn() {};
-	virtual void OnWin() {};
-	virtual void OnLose() {};
+    int32 PlayerNumber;
+
+    EPlayerType PlayerType;
+
+    TArray<AUnit*> Units;
+
+    bool IsMyTurn = false;
+
+    bool bIsActivePlayer = true;
+
+    USaT_GameInstance* GameInstance;
+
+    virtual void OnGameStart() {};
+
+    virtual void OnTurn() {};
+
+    virtual void OnWin() {};
+
+    virtual void OnLose() {};
+
+    void OnDraw();
+
+    void PlaceUnit(int32 GridX, int32 GridY, EUnitType UnitType);
+
+    virtual void SelectUnit(AUnit* Unit) {};
+
+    virtual void OnCoinTossWin() {};
+
+    virtual void OnCoinTossLose() {};
 };
