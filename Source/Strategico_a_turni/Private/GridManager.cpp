@@ -3,7 +3,6 @@
 
 #include "GridManager.h"
 #include "Unit.h"
-#include "SaT_GameMode.h"
 
 // Sets default values
 AGridManager::AGridManager()
