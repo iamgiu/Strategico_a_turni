@@ -3,6 +3,7 @@
 
 #include "Unit.h"
 #include "Kismet/GameplayStatics.h"
+#include "Sat_GameMode.h"
 #include "Engine/World.h"
 
 // Sets default values

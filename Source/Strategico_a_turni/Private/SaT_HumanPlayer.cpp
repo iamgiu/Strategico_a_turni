@@ -1,8 +1,8 @@
 // Fill out your copyright notice in the Description page of Project Settings.
 
 
-#include "Kismet/GameplayStatics.h"
 #include "SaT_HumanPlayer.h"
+#include "Kismet/GameplayStatics.h"
 #include "Sniper.h"
 #include "Brawler.h"
 

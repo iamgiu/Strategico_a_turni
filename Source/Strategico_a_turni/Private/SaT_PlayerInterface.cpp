@@ -2,3 +2,9 @@
 
 
 #include "SaT_PlayerInterface.h"
+
+//void ISaT_PlayerInterface::OnDraw()
+//{
+	//if (GameInstance)
+		//GameInstance->SetTurnMessage(USaT_GameInstance::DRAW);
+//}

@@ -6,7 +6,6 @@
 #include "GameFramework/Pawn.h"
 #include "Camera/CameraComponent.h"
 #include "SaT_PlayerInterface.h"
-#include "Unit.h"
 #include "SaT_GameInstance.h"
 #include "SaT_HumanPlayer.generated.h"
 
@@ -16,11 +15,12 @@ class STRATEGICO_A_TURNI_API ASaT_HumanPlayer : public APawn, public ISaT_Player
     GENERATED_BODY()
 
 public:
+
+    ASaT_HumanPlayer();
+
     // Camera attaccata al giocatore
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera")
     UCameraComponent* Camera;
-
-    ASaT_HumanPlayer();
 
     // Chiamato ogni frame
     virtual void Tick(float DeltaTime) override;
@@ -58,4 +58,20 @@ protected:
 
     // Ultima cella selezionata
     FVector LastSelectedCell;
+
+public:
+
+    void SetGridManager(AGridManager* InGridManager) { GridManager = InGridManager; }
+    void SetCurrentPhase(EGamePhase InPhase) { CurrentPhase = InPhase; }
+    void SetUnitsToPlace(int32 InUnitsToPlace) { UnitsToPlace = InUnitsToPlace; }
+
+    // Assicurati di avere queste variabili dichiarate
+    UPROPERTY()
+    AGridManager* GridManager;
+
+    UPROPERTY()
+    EGamePhase CurrentPhase;
+
+    UPROPERTY()
+    int32 UnitsToPlace;
 };

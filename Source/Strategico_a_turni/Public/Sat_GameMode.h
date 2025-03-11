@@ -1,41 +1,45 @@
-// Fill out your copyright notice in the Description page of Project Settings.
-
 #pragma once
 
 #include "CoreMinimal.h"
-#include "Engine/TextureDefines.h"
-#include "GameFramework/GameMode.h"
-#include "SaT_HumanPlayer.h"
-#include "GridManager.h"
+#include "GameFramework/GameModeBase.h"
+#include "SaT_Enums.h"
 #include "SaT_GameMode.generated.h"
 
+class ISaT_PlayerInterface;
+class AGridManager;
+class AUnit;
+
 UCLASS()
-class STRATEGICO_A_TURNI_API ASaT_GameMode : public AGameMode
+class STRATEGICO_A_TURNI_API ASaT_GameMode : public AGameModeBase
 {
-    GENERATED_BODY()
+	GENERATED_BODY()
 
 public:
-    ASaT_GameMode();
+	static constexpr int8 MIN_NUMBER_SPAWN_PLAYERS = 2;
 
-    virtual void BeginPlay() override;
+	ASaT_GameMode();
 
-    // Funzione per il lancio della moneta
-    UFUNCTION(BlueprintCallable, Category = "Game")
-    void CoinToss();
+	virtual void BeginPlay() override;
 
-    // Evento chiamato dopo il lancio della moneta
-    UFUNCTION(BlueprintImplementableEvent, Category = "Game")
-    void OnCoinTossComplete(bool bIsPlayerFirst);
+	/* GAME MANAGEMENT */
+	void StartGame();
+	void FlipCoinToDecideFirstPlayer();
+	void TurnNextPlayer();
+	void EndTurn();
+	bool CheckGameOver();
 
-    // Riferimento al GridManager
-    UPROPERTY(Transient)
-    AGridManager* GridManager;
+	/* ATTRIBUTES */
+	UPROPERTY(EditDefaultsOnly)
+	TSubclassOf<AGridManager> GameManagerClass;
 
-    // Riferimento al giocatore umano
-    UPROPERTY(Transient)
-    ASaT_HumanPlayer* HumanPlayer;
+	UPROPERTY(VisibleAnywhere)
+	AGridManager* Gmanager;
 
-    // Numero di unità iniziali per giocatore
-    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Game Rules")
-    int32 InitialUnitsCount = 5;
+	TArray<ISaT_PlayerInterface*> Players;
+	int32 CurrentPlayer;
+	bool bIsGameOver;
+
+protected:
+
+	void InitializePlayers();
 };

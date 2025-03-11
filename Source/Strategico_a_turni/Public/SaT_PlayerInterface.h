@@ -4,64 +4,40 @@
 
 #include "CoreMinimal.h"
 #include "UObject/Interface.h"
-#include "SaT_GameInstance.h"
+#include "Sat_GameInstance.h"
+#include "Sat_GameMode.h"
 #include "SaT_PlayerInterface.generated.h"
 
-enum class EUnitType : uint8
-{
-    Sniper,
-    Brawler
-};
+enum class EUnitColor : int8;
 
-enum class EPlayerType : uint8
-{
-    Human,
-    AI
-};
-
-class ASaT_GameField;
+class AGridManager;
 class AUnit;
 
+// This class does not need to be modified.
 UINTERFACE(MinimalAPI)
 class USaT_PlayerInterface : public UInterface
 {
-    GENERATED_BODY()
+	GENERATED_BODY()
 };
 
 class STRATEGICO_A_TURNI_API ISaT_PlayerInterface
 {
+	GENERATED_BODY()
 
-    GENERATED_BODY()
- 
+	// Add interface functions to this class. This is the class that will be inherited to implement this interface.
 public:
+	static constexpr int8 TIMER_NONE = 1;
 
-    int32 PlayerNumber;
+	int32 PlayerNumber;
+	EPieceColor Color;
+	TArray<TArray<std::pair<int8, int8>>> AttackableTiles;
+	bool IsMyTurn = false;
+	bool bIsActivePlayer = true;
 
-    EPlayerType PlayerType;
+	USaT_GameInstance* GameInstance;
 
-    TArray<AUnit*> Units;
-
-    bool IsMyTurn = false;
-
-    bool bIsActivePlayer = true;
-
-    USaT_GameInstance* GameInstance;
-
-    virtual void OnGameStart() {};
-
-    virtual void OnTurn() {};
-
-    virtual void OnWin() {};
-
-    virtual void OnLose() {};
-
-    void OnDraw();
-
-    void PlaceUnit(int32 GridX, int32 GridY, EUnitType UnitType);
-
-    virtual void SelectUnit(AUnit* Unit) {};
-
-    virtual void OnCoinTossWin() {};
-
-    virtual void OnCoinTossLose() {};
+	virtual void OnTurn() {};
+	virtual void OnWin() {};
+	virtual void OnLose() {};
+	//void OnDraw();
 };

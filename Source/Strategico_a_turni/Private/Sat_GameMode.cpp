@@ -2,77 +2,75 @@
 
 
 #include "SaT_GameMode.h"
-#include "GridManager.h"
-#include "SaT_HumanPlayer.h"
+#include "GameFramework/Actor.h"
 #include "Kismet/GameplayStatics.h"
+#include "SaT_PlayerInterface.h"
+#include "GridManager.h"
 
 ASaT_GameMode::ASaT_GameMode()
 {
-    // Imposta il PlayerController e il Pawn predefiniti
-    PlayerControllerClass = ASaT_PlayerController::StaticClass();
-    DefaultPawnClass = ASaT_HumanPlayer::StaticClass();
+	PrimaryActorTick.bCanEverTick = false;
+	bIsGameOver = false;
+	CurrentPlayer = 0;
 }
 
 void ASaT_GameMode::BeginPlay()
 {
-    Super::BeginPlay();
-
-    // Crea il GridManager se non esiste già
-    TArray<AActor*> FoundGridManagers;
-    UGameplayStatics::GetAllActorsOfClass(GetWorld(), AGridManager::StaticClass(), FoundGridManagers);
-
-    if (FoundGridManagers.Num() == 0)
-    {
-        // Spawna il GridManager
-        FActorSpawnParameters SpawnParams;
-        SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
-        GridManager = GetWorld()->SpawnActor<AGridManager>(AGridManager::StaticClass(), FVector::ZeroVector, FRotator::ZeroRotator, SpawnParams);
-    }
-    else
-    {
-        GridManager = Cast<AGridManager>(FoundGridManagers[0]);
-    }
-
-    // Ottieni il riferimento al HumanPlayer
-    HumanPlayer = Cast<ASaT_HumanPlayer>(UGameplayStatics::GetPlayerPawn(GetWorld(), 0));
-
-    if (HumanPlayer)
-    {
-        // Assegna il GridManager al HumanPlayer
-        HumanPlayer->GridManager = GridManager;
-        HumanPlayer->CurrentPhase = EGamePhase::SETUP;
-        HumanPlayer->UnitsToPlace = InitialUnitsCount;
-    }
-
-    // Esegui il lancio della moneta per decidere chi inizia
-    CoinToss();
+	Super::BeginPlay();
+	StartGame();
 }
 
-void ASaT_GameMode::CoinToss()
+void ASaT_GameMode::StartGame()
 {
-    // Lancio della moneta casuale
-    bool bIsPlayerFirst = FMath::RandBool();
-
-    // Chiamare l'evento Blueprint
-    OnCoinTossComplete(bIsPlayerFirst);
-
-    // Se il giocatore inizia per primo, attiva il suo turno
-    if (bIsPlayerFirst && HumanPlayer)
-    {
-        HumanPlayer->OnTurn();
-    }
-    else
-    {
-        // Gestione del turno dell'AI (da implementare)
-        // ...
-
-        // Temporaneamente, passa comunque al giocatore
-        if (HumanPlayer)
-        {
-            HumanPlayer->OnTurn();
-        }
-    }
-}
+	InitializePlayers();
+	FlipCoinToDecideFirstPlayer();
 }
 
+void ASaT_GameMode::InitializePlayers()
+{
+	TArray<AActor*> FoundPlayers;
+	UGameplayStatics::GetAllActorsWithInterface(this, USaT_PlayerInterface::StaticClass(), FoundPlayers);
 
+	for (AActor* Actor : FoundPlayers)
+	{
+		ISaT_PlayerInterface* Player = Cast<ISaT_PlayerInterface>(Actor);
+		if (Player)
+		{
+			Players.Add(Player);
+		}
+	}
+}
+
+void ASaT_GameMode::FlipCoinToDecideFirstPlayer()
+{
+	CurrentPlayer = FMath::RandBool() ? 0 : 1;
+}
+
+void ASaT_GameMode::TurnNextPlayer()
+{
+	CurrentPlayer = (CurrentPlayer + 1) % Players.Num();
+}
+
+void ASaT_GameMode::EndTurn()
+{
+	if (CheckGameOver())
+	{
+		bIsGameOver = true;
+	}
+	else
+	{
+		TurnNextPlayer();
+	}
+}
+
+//bool ASaT_GameMode::CheckGameOver()
+//{
+	//for (ISaT_PlayerInterface* Player : Players)
+	//{
+		//if (Player && Player->OnLose())
+		//{
+			//return true;
+		//}
+	//}
+	//return false;
+//}
