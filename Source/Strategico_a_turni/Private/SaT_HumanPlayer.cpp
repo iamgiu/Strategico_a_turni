@@ -4,6 +4,7 @@
 #include "SaT_HumanPlayer.h"
 #include "Kismet/GameplayStatics.h"
 #include "Sniper.h"
+#include "Camera/CameraComponent.h"
 #include "Brawler.h"
 
 
@@ -21,6 +22,7 @@ ASaT_HumanPlayer::ASaT_HumanPlayer()
 void ASaT_HumanPlayer::BeginPlay()
 {
     Super::BeginPlay();
+
 
     // Ottieni referenza al GameInstance
     GameInstance = Cast<USaT_GameInstance>(UGameplayStatics::GetGameInstance(GetWorld()));
@@ -88,7 +90,7 @@ void ASaT_HumanPlayer::OnClick()
 
                 // Qui potresti aprire un menu di selezione per Sniper o Brawler
                 // Per ora usiamo un log per debug
-                UE_LOG(LogTemp, Warning, TEXT("Cella selezionata: %d, %d - Seleziona tipo unità"), SelectedGridX, SelectedGridY);
+                //UE_LOG(LogTemp, Warning, TEXT("Cella selezionata: %d, %d - Seleziona tipo unità"), SelectedGridX, SelectedGridY);
             }
             else if (SelectionState == 1)
             {

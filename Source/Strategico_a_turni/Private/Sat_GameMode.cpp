@@ -63,8 +63,8 @@ void ASaT_GameMode::EndTurn()
 	}
 }
 
-//bool ASaT_GameMode::CheckGameOver()
-//{
+bool ASaT_GameMode::CheckGameOver()
+{
 	//for (ISaT_PlayerInterface* Player : Players)
 	//{
 		//if (Player && Player->OnLose())
@@ -72,5 +72,6 @@ void ASaT_GameMode::EndTurn()
 			//return true;
 		//}
 	//}
-	//return false;
-//}
+
+	return false;
+}
