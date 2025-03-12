@@ -15,7 +15,7 @@ ASaT_HumanPlayer::ASaT_HumanPlayer()
     // Crea la camera
     Camera = CreateDefaultSubobject<UCameraComponent>(TEXT("Camera"));
     RootComponent = Camera;
-    Camera->SetRelativeLocation(FVector(0, 0, 1000)); // Posiziona sopra la griglia
+    Camera->SetRelativeLocation(FVector(0, -200, 400)); // Posiziona sopra la griglia
     Camera->SetRelativeRotation(FRotator(-90, 0, 0)); // Guarda verso il basso
 }
 
