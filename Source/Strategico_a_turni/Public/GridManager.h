@@ -7,6 +7,8 @@
 #include "GameFramework/Actor.h"
 #include "GridManager.generated.h"
 
+class AUnit;
+
 UCLASS()
 class STRATEGICO_A_TURNI_API AGridManager : public AActor
 {

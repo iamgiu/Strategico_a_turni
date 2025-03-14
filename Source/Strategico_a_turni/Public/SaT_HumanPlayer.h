@@ -7,7 +7,12 @@
 #include "Camera/CameraComponent.h"
 #include "SaT_PlayerInterface.h"
 #include "SaT_GameInstance.h"
+#include "SaT_Enums.h"
 #include "SaT_HumanPlayer.generated.h"
+
+// Forward declarations
+class AGridManager;
+class AUnit;
 
 UCLASS()
 class STRATEGICO_A_TURNI_API ASaT_HumanPlayer : public APawn, public ISaT_PlayerInterface
@@ -15,8 +20,11 @@ class STRATEGICO_A_TURNI_API ASaT_HumanPlayer : public APawn, public ISaT_Player
     GENERATED_BODY()
 
 public:
-
     ASaT_HumanPlayer();
+
+    // Scene root component
+    UPROPERTY(VisibleDefaultsOnly, Category = "Components")
+    USceneComponent* DefaultSceneRoot;
 
     // Camera attaccata al giocatore
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera")
@@ -41,10 +49,23 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Gameplay")
     void PlaceUnit(int32 GridX, int32 GridY, bool bIsSniper);
 
+    // Setter per GridManager
+    UFUNCTION(BlueprintCallable, Category = "Setup")
+    void SetGridManager(AGridManager* InGridManager) { GridManager = InGridManager; }
+
+    // Setter per CurrentPhase
+    UFUNCTION(BlueprintCallable, Category = "Setup")
+    void SetCurrentPhase(EGamePhase InPhase) { CurrentPhase = InPhase; }
+
+    // Setter per UnitsToPlace
+    UFUNCTION(BlueprintCallable, Category = "Setup")
+    void SetUnitsToPlace(int32 InUnitsToPlace) { UnitsToPlace = InUnitsToPlace; }
+
 protected:
     virtual void BeginPlay() override;
 
     // Riferimento al GameInstance
+    UPROPERTY()
     USaT_GameInstance* GameInstance;
 
     // Cella selezionata
@@ -59,19 +80,15 @@ protected:
     // Ultima cella selezionata
     FVector LastSelectedCell;
 
-public:
-
-    void SetGridManager(AGridManager* InGridManager) { GridManager = InGridManager; }
-    void SetCurrentPhase(EGamePhase InPhase) { CurrentPhase = InPhase; }
-    void SetUnitsToPlace(int32 InUnitsToPlace) { UnitsToPlace = InUnitsToPlace; }
-
-    // Assicurati di avere queste variabili dichiarate
-    UPROPERTY()
+    // Riferimento al GridManager
+    UPROPERTY(BlueprintReadOnly, Category = "References")
     AGridManager* GridManager;
 
-    UPROPERTY()
+    // Fase di gioco corrente
+    UPROPERTY(BlueprintReadOnly, Category = "Gameplay")
     EGamePhase CurrentPhase;
 
-    UPROPERTY()
+    // Numero di unità da piazzare
+    UPROPERTY(BlueprintReadOnly, Category = "Gameplay")
     int32 UnitsToPlace;
 };

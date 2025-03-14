@@ -4,15 +4,8 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
+#include "SaT_Enums.h"
 #include "Tile.generated.h"
-
-//If the cell is empty or occupied
-UENUM()
-enum class ETileStatus : uint8
-{
-	EMPTY UMETA(DisplayName = "Empty"),
-	OCCUPIED UMETA(DisplayName = "Occupied"),
-};
 
 UCLASS()
 class STRATEGICO_A_TURNI_API ATile : public AActor

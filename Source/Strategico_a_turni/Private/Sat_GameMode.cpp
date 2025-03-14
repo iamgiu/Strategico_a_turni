@@ -5,7 +5,6 @@
 #include "GameFramework/Actor.h"
 #include "Kismet/GameplayStatics.h"
 #include "SaT_PlayerInterface.h"
-#include "GridManager.h"
 
 ASaT_GameMode::ASaT_GameMode()
 {
@@ -24,6 +23,8 @@ void ASaT_GameMode::StartGame()
 {
 	InitializePlayers();
 	FlipCoinToDecideFirstPlayer();
+
+	UE_LOG(LogTemp, Warning, TEXT("SaT_GameMode: Game started, Current player index: %d"), CurrentPlayer);
 }
 
 void ASaT_GameMode::InitializePlayers()
@@ -41,14 +42,65 @@ void ASaT_GameMode::InitializePlayers()
 	}
 }
 
+void ASaT_GameMode::StartFirstTurn()
+{
+	if (Players.Num() == 0)
+	{
+		UE_LOG(LogTemp, Error, TEXT("SaT_GameMode: Nessun giocatore disponibile per iniziare il turno!"));
+		return;
+	}
+
+	// Notifica al giocatore corrente che è il suo turno
+	UE_LOG(LogTemp, Warning, TEXT("SaT_GameMode: Inizio il primo turno per il giocatore %d"), CurrentPlayer);
+	Players[CurrentPlayer]->OnTurn();
+}
+
+// Modifica il tuo metodo FlipCoinToDecideFirstPlayer per chiamare StartFirstTurn
 void ASaT_GameMode::FlipCoinToDecideFirstPlayer()
 {
-	CurrentPlayer = FMath::RandBool() ? 0 : 1;
+	UE_LOG(LogTemp, Warning, TEXT("SaT_GameMode: FlipCoinToDecideFirstPlayer called"));
+
+	if (Players.Num() < 2)
+	{
+		UE_LOG(LogTemp, Error, TEXT("SaT_GameMode: Not enough players to flip coin! Only %d players found."), Players.Num());
+		return;
+	}
+
+	// Utilizziamo FMath::RandBool() per decidere casualmente chi inizia
+	bool bHumanGoesFirst = FMath::RandBool();
+
+	if (bHumanGoesFirst)
+	{
+		CurrentPlayer = 0; // Indice del giocatore umano
+		CurrentPlayerType = EPlayerType::Human;
+		UE_LOG(LogTemp, Warning, TEXT("SaT_GameMode: Coin flip result - Human player goes first"));
+	}
+	else
+	{
+		CurrentPlayer = 1; // Indice dell'IA
+		CurrentPlayerType = EPlayerType::AI;
+		UE_LOG(LogTemp, Warning, TEXT("SaT_GameMode: Coin flip result - AI player goes first"));
+	}
+
+	// Inizia il primo turno
+	StartFirstTurn();
 }
 
 void ASaT_GameMode::TurnNextPlayer()
 {
+	if (Players.Num() == 0)
+	{
+		UE_LOG(LogTemp, Error, TEXT("SaT_GameMode: Cannot turn to next player, no players available!"));
+		return;
+	}
+
 	CurrentPlayer = (CurrentPlayer + 1) % Players.Num();
+
+	// Alterna tra Human e AI
+	CurrentPlayerType = (CurrentPlayerType == EPlayerType::Human) ? EPlayerType::AI : EPlayerType::Human;
+
+	UE_LOG(LogTemp, Warning, TEXT("SaT_GameMode: Turned to next player, Current player type: %s"),
+		(CurrentPlayerType == EPlayerType::Human) ? TEXT("Human") : TEXT("AI"));
 }
 
 void ASaT_GameMode::EndTurn()
@@ -60,6 +112,12 @@ void ASaT_GameMode::EndTurn()
 	else
 	{
 		TurnNextPlayer();
+
+		// Notifica al prossimo giocatore che è il suo turno
+		if (Players.Num() > CurrentPlayer)
+		{
+			Players[CurrentPlayer]->OnTurn();
+		}
 	}
 }
 

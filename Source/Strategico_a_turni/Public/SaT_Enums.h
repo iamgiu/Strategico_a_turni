@@ -14,10 +14,11 @@ enum class EPieceUnit : uint8
 	BRAWLER,
 };
 
+UENUM(BlueprintType)
 enum class EPlayerType : uint8
 {
-	Human,
-	AI
+	Human UMETA(DisplayName = "Human"),
+	AI UMETA(DisplayName = "AI")
 };
 
 UENUM()
@@ -46,6 +47,12 @@ enum class EUnitStatus : int8
 	DEAD
 };
 
+UENUM(BlueprintType)
+enum class ETileStatus : uint8
+{
+	EMPTY UMETA(DisplayName = "Empty"),
+	OCCUPIED UMETA(DisplayName = "Occupied"),
+};
 
 class STRATEGICO_A_TURNI_API SaT_Enums
 {

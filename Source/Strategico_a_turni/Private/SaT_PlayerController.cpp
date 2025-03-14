@@ -1,45 +1,52 @@
-// Fill out your copyright notice in the Description page of Project Settings.
-
-
-#include "Sat_PlayerController.h"
+#include "SaT_PlayerController.h"
+#include "SaT_HumanPlayer.h"
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
-#include "SaT_HumanPlayer.h"
 
+#include "SaT_PlayerController.h"
+#include "SaT_HumanPlayer.h"
+#include "EnhancedInputComponent.h"
+#include "EnhancedInputSubsystems.h"
 
 ASaT_PlayerController::ASaT_PlayerController()
 {
-	bShowMouseCursor = true;
-	bEnableClickEvents = true;
+    // Costruttore
 }
 
 void ASaT_PlayerController::BeginPlay()
 {
-	Super::BeginPlay();
+    Super::BeginPlay();
 
-	if (UEnhancedInputLocalPlayerSubsystem* Subsystem = ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(GetLocalPlayer()))
-	{
-		Subsystem->AddMappingContext(SaTContext, 0);
-	}
+    // Imposta il mapping context se stai usando Enhanced Input System
+    if (UEnhancedInputLocalPlayerSubsystem* Subsystem = ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(GetLocalPlayer()))
+    {
+        if (SaTContext)
+        {
+            Subsystem->AddMappingContext(SaTContext, 0);
+        }
+    }
 }
 
 void ASaT_PlayerController::SetupInputComponent()
 {
-	Super::SetupInputComponent();
+    Super::SetupInputComponent();
 
-	// Set up action bindings
-	if (UEnhancedInputComponent* EnhancedInputComponent = CastChecked<UEnhancedInputComponent>(InputComponent))
-	{
-		EnhancedInputComponent->BindAction(ClickAction, ETriggerEvent::Triggered, this, &ASaT_PlayerController::ClickOnGrid);
-	}
+    // Binding per Enhanced Input System
+    if (UEnhancedInputComponent* EnhancedInputComponent = CastChecked<UEnhancedInputComponent>(InputComponent))
+    {
+        if (ClickAction)
+        {
+            EnhancedInputComponent->BindAction(ClickAction, ETriggerEvent::Triggered, this, &ASaT_PlayerController::ClickOnGrid);
+        }
+    }
 }
-
 
 void ASaT_PlayerController::ClickOnGrid(const FInputActionValue& Value)
 {
-	const auto HumanPlayer = Cast<ASaT_HumanPlayer>(GetPawn());
-	if (IsValid(HumanPlayer))
-	{
-		HumanPlayer->OnClick();
-	}
+    // Ottiene il pawn come SaT_HumanPlayer e chiama OnClick
+    ASaT_HumanPlayer* HumanPlayer = Cast<ASaT_HumanPlayer>(GetPawn());
+    if (HumanPlayer)
+    {
+        HumanPlayer->OnClick();
+    }
 }

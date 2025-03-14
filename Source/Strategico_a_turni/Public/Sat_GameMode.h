@@ -23,6 +23,7 @@ public:
 
 	/* GAME MANAGEMENT */
 	void StartGame();
+	void StartFirstTurn();
 	void FlipCoinToDecideFirstPlayer();
 	void TurnNextPlayer();
 	void EndTurn();
@@ -38,6 +39,9 @@ public:
 	TArray<ISaT_PlayerInterface*> Players;
 	int32 CurrentPlayer;
 	bool bIsGameOver;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Game")
+	EPlayerType CurrentPlayerType;
 
 protected:
 
