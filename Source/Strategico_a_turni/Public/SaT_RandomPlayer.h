@@ -9,6 +9,7 @@
 
 class USaT_GameInstance;
 class AGridManager;
+class AUnit;
 
 UCLASS()
 class STRATEGICO_A_TURNI_API ASaT_RandomPlayer : public APawn, public ISaT_PlayerInterface
@@ -18,6 +19,13 @@ class STRATEGICO_A_TURNI_API ASaT_RandomPlayer : public APawn, public ISaT_Playe
 public:
     // Sets default values for this pawn's properties
     ASaT_RandomPlayer();
+
+    // Riferimenti ai Blueprint delle unità
+    UPROPERTY(EditDefaultsOnly, Category = "Units")
+    TSubclassOf<class ASniper> SniperClass;
+
+    UPROPERTY(EditDefaultsOnly, Category = "Units")
+    TSubclassOf<class ABrawler> BrawlerClass;
 
 protected:
     // Called when the game starts or when spawned

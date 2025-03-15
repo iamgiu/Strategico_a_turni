@@ -77,21 +77,33 @@ void ASaT_RandomPlayer::PlaceRandomUnit()
         SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
 
         // Spawna l'unità appropriata
+        AUnit* Unit = nullptr;
+
         if (bIsSniper)
         {
-            AUnit* Unit = GetWorld()->SpawnActor<ASniper>(ASniper::StaticClass(), SpawnLocation, FRotator::ZeroRotator, SpawnParams);
-            Unit->bIsPlayerUnit = false; // Imposta come unità AI
+            // Usa il Blueprint se disponibile, altrimenti fallback alla classe base
+            TSubclassOf<ASniper> ClassToUse = SniperClass ? SniperClass : TSubclassOf<ASniper>(ASniper::StaticClass());
+            Unit = GetWorld()->SpawnActor<ASniper>(ClassToUse, SpawnLocation, FRotator::ZeroRotator, SpawnParams);
             UE_LOG(LogTemp, Warning, TEXT("AI: Sniper piazzato in %d, %d"), GridX, GridY);
         }
         else
         {
-            AUnit* Unit = GetWorld()->SpawnActor<ABrawler>(ABrawler::StaticClass(), SpawnLocation, FRotator::ZeroRotator, SpawnParams);
-            Unit->bIsPlayerUnit = false; // Imposta come unità AI
+            // Usa il Blueprint se disponibile, altrimenti fallback alla classe base
+            TSubclassOf<ABrawler> ClassToUse = BrawlerClass ? BrawlerClass : TSubclassOf<ABrawler>(ABrawler::StaticClass());
+            Unit = GetWorld()->SpawnActor<ABrawler>(ClassToUse, SpawnLocation, FRotator::ZeroRotator, SpawnParams);
             UE_LOG(LogTemp, Warning, TEXT("AI: Brawler piazzato in %d, %d"), GridX, GridY);
         }
 
-        // Marca la cella come occupata
-        GridManager->OccupyCell(GridX, GridY, nullptr); // Aggiorna questo per passare l'unità corretta
+        // Configura l'unità
+        if (Unit)
+        {
+            Unit->GridX = GridX;
+            Unit->GridY = GridY;
+            Unit->bIsPlayerUnit = false; // Imposta come unità AI
+
+            // Marca la cella come occupata
+            GridManager->OccupyCell(GridX, GridY, Unit);
+        }
     }
     else
     {

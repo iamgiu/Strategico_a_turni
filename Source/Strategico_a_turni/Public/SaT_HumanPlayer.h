@@ -30,6 +30,12 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera")
     UCameraComponent* Camera;
 
+    UPROPERTY(EditDefaultsOnly, Category = "Units")
+    TSubclassOf<class ASniper> SniperClass;
+
+    UPROPERTY(EditDefaultsOnly, Category = "Units")
+    TSubclassOf<class ABrawler> BrawlerClass;
+
     // Chiamato ogni frame
     virtual void Tick(float DeltaTime) override;
 
@@ -60,6 +66,19 @@ public:
     // Setter per UnitsToPlace
     UFUNCTION(BlueprintCallable, Category = "Setup")
     void SetUnitsToPlace(int32 InUnitsToPlace) { UnitsToPlace = InUnitsToPlace; }
+
+    //UPROPERTY(EditDefaultsOnly, Category = "UI")
+    //TSubclassOf<class UUserWidget> UnitSelectionWidgetClass;
+
+    //UPROPERTY()
+    //class UUserWidget* UnitSelectionWidget;
+
+    // Funzioni per gestire le selezioni
+    //UFUNCTION(BlueprintCallable, Category = "Unit Selection")
+    //void OnUnitWidgetSniperSelected();
+
+    //UFUNCTION(BlueprintCallable, Category = "Unit Selection")
+    //void OnUnitWidgetBrawlerSelected();
 
 protected:
     virtual void BeginPlay() override;

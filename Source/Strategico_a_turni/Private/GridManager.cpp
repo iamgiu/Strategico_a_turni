@@ -219,18 +219,16 @@ void AGridManager::OccupyCell(int32 GridX, int32 GridY, AUnit* Unit)
 	}
 }
 
-// Ottieni la posizione del mondo dalle coordinate della griglia
 FVector AGridManager::GetWorldLocationFromGrid(int32 GridX, int32 GridY)
 {
-	// Calcola la posizione relativa 
-	FVector RelativeLocation = GetRelativeLocationByXYPosition(GridX, GridY);
+	// Calcolo diretto senza trasformazione
+	FVector WorldLocation = FVector(GridX * TileSize, GridY * TileSize, 0.0f);
 
-	// Converti la posizione relativa in una posizione globale
-	FVector WorldLocation = GetActorTransform().TransformPosition(RelativeLocation);
+	// Aggiungi offset verticale
+	WorldLocation.Z += 50.0f;  // Valore maggiore per rendere l'unità più visibile
 
-	// Aggiungi un offset verticale per posizionare l'unità sulla superficie del tile
-	// Presuppone che l'origine dell'unità sia alla sua base
-	WorldLocation.Z += TileSize * 0.5f;
+	UE_LOG(LogTemp, Warning, TEXT("Posizione mondo diretta: X=%f, Y=%f, Z=%f"),
+		WorldLocation.X, WorldLocation.Y, WorldLocation.Z);
 
 	return WorldLocation;
 }
