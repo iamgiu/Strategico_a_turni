@@ -220,6 +220,36 @@ void AGridManager::OccupyCell(int32 GridX, int32 GridY, AUnit* Unit)
 
 FVector AGridManager::GetWorldLocationFromGrid(int32 GridX, int32 GridY)
 {
+    // Trova il tile alle coordinate specificate
+    if (TileMap.Contains(FVector2D(GridX, GridY)))
+    {
+        ATile* Tile = TileMap[FVector2D(GridX-1, GridY-1)];
+        if (Tile)
+        {
+            // Usa la posizione esatta del tile
+            FVector TileLocation = Tile->GetActorLocation();
+            // Aggiungi offset Z per rendere l'unità visibile sopra il tile
+            TileLocation.Z += 50.0f;
+            
+            UE_LOG(LogTemp, Warning, TEXT("Posizione mondo calcolata da tile: X=%f, Y=%f, Z=%f"),
+                TileLocation.X, TileLocation.Y, TileLocation.Z);
+                
+            return TileLocation;
+        }
+    }
+    
+    // Fallback al calcolo matematico se il tile non esiste
+    FVector WorldLocation = GetRelativeLocationByXYPosition(GridX, GridY);
+    WorldLocation.Z += 50.0f;
+    
+    UE_LOG(LogTemp, Warning, TEXT("Posizione mondo calcolata matematicamente: X=%f, Y=%f, Z=%f"),
+        WorldLocation.X, WorldLocation.Y, WorldLocation.Z);
+        
+    return WorldLocation;
+}
+
+/*FVector AGridManager::GetWorldLocationFromGrid(int32 GridX, int32 GridY)
+{
 	// Usa NextCellPositionMultiplier per mantenere coerenza con il resto del codice
 	FVector WorldLocation = GetRelativeLocationByXYPosition(GridX-1, GridY-1);
 
@@ -230,7 +260,7 @@ FVector AGridManager::GetWorldLocationFromGrid(int32 GridX, int32 GridY)
 		WorldLocation.X, WorldLocation.Y, WorldLocation.Z);
 
 	return WorldLocation;
-}
+}*/
 
 // Called every frame
 //void AGameField::Tick(float DeltaTime)

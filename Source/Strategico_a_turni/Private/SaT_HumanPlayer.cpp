@@ -1,6 +1,9 @@
 // Fill out your copyright notice in the Description page of Project Settings.
 
 
+// Fill out your copyright notice in the Description page of Project Settings.
+
+
 #include "SaT_HumanPlayer.h"
 #include "Components/SceneComponent.h"
 #include "Camera/CameraComponent.h"
@@ -10,6 +13,7 @@
 #include "Brawler.h"
 #include "Unit.h"
 #include "Blueprint/UserWidget.h"
+#include "Components/Button.h"
 #include "SaT_GameInstance.h"
 
 ASaT_HumanPlayer::ASaT_HumanPlayer()
@@ -68,6 +72,15 @@ void ASaT_HumanPlayer::BeginPlay()
             UE_LOG(LogTemp, Warning, TEXT("GridManager non trovato nella scena!"));
         }
     }
+
+    if (UnitSelectionWidgetClass)
+    {
+        UE_LOG(LogTemp, Display, TEXT("UnitSelectionWidgetClass è impostato correttamente"));
+    }
+    else
+    {
+        UE_LOG(LogTemp, Error, TEXT("UnitSelectionWidgetClass NON è impostato! Configura questa proprietà nel Blueprint"));
+    }
 }
 
 void ASaT_HumanPlayer::Tick(float DeltaTime)
@@ -99,18 +112,11 @@ void ASaT_HumanPlayer::OnLose()
 
 void ASaT_HumanPlayer::OnClick()
 {
-    // Funzione ridotta al minimo
     UE_LOG(LogTemp, Display, TEXT("OnClick chiamato"));
 
-    // Aggiungi una chiamata di test a PlaceUnit
-    // Questo posizionerà uno Sniper nella posizione 5,5
-    PlaceUnit(5, 5, true);
-
     // Ottieni il controller del giocatore
-    //APlayerController* PC = GetWorld()->GetFirstPlayerController();
-
-
-/*    if (PC)
+    APlayerController* PC = GetWorld()->GetFirstPlayerController();
+    if (PC)
     {
         FHitResult HitResult;
         PC->GetHitResultUnderCursor(ECC_Visibility, false, HitResult);
@@ -121,79 +127,128 @@ void ASaT_HumanPlayer::OnClick()
             LastSelectedCell = HitResult.Location;
 
             // Converti la posizione 3D in coordinate della griglia
-            SelectedGridX = FMath::FloorToInt(LastSelectedCell.X / 100.0f);
-            SelectedGridY = FMath::FloorToInt(LastSelectedCell.Y / 100.0f);
-
-            // Verifica se la cella è occupata usando GridManager
-            if (GridManager && !GridManager->IsCellOccupied(SelectedGridX, SelectedGridY))
+            // Utilizza GetXYPositionByRelativeLocation del GridManager se disponibile
+            if (GridManager)
             {
-                UE_LOG(LogTemp, Display, TEXT("Cella selezionata: %d, %d"), SelectedGridX, SelectedGridY);
+                FVector2D GridPosition = GridManager->GetXYPositionByRelativeLocation(HitResult.Location);
+                SelectedGridX = FMath::FloorToInt(GridPosition.X);
+                SelectedGridY = FMath::FloorToInt(GridPosition.Y);
 
-                if (UnitSelectionWidgetClass)
+                UE_LOG(LogTemp, Warning, TEXT("Cella selezionata in coordinate grid: X=%d, Y=%d"),
+                    SelectedGridX, SelectedGridY);
+
+                // Verifica se la cella è occupata usando GridManager
+                if (!GridManager->IsCellOccupied(SelectedGridX, SelectedGridY))
                 {
-                    // Elimina widget esistenti
-                    if (UnitSelectionWidget)
-                    {
-                        UnitSelectionWidget->RemoveFromParent();
-                        UnitSelectionWidget = nullptr;
-                    }
-
-                    // Crea il widget
-                    UnitSelectionWidget = CreateWidget<UUserWidget>(PC, UnitSelectionWidgetClass);
-                    if (UnitSelectionWidget)
-                    {
-                        // Mostra il widget
-                        UnitSelectionWidget->AddToViewport();
-
-                        // Imposta l'input mode per gestire il widget
-                        PC->SetInputMode(FInputModeUIOnly());
-                        PC->bShowMouseCursor = true;
-                    }
+                    //UE_LOG(LogTemp, Display, TEXT("Cella libera! Mostro il widget di selezione unità"));
+                    ShowUnitSelectionWidget();
+                }
+                else
+                {
+                    UE_LOG(LogTemp, Warning, TEXT("Cella occupata! Non è possibile piazzare un'unità qui"));
                 }
             }
         }
-    }*/
+    }
 }
 
-/*void ASaT_HumanPlayer::OnUnitWidgetSniperSelected()
+void ASaT_HumanPlayer::ShowUnitSelectionWidget()
+{
+    // Ottieni il controller del giocatore
+    APlayerController* PC = GetWorld()->GetFirstPlayerController();
+    if (PC)
+    {
+        // Verifica se esiste già un'istanza del widget
+        if (UnitSelectionWidget)
+        {
+            UnitSelectionWidget->RemoveFromParent();
+            UnitSelectionWidget = nullptr;
+        }
+
+        // Crea il widget di selezione unità
+        UnitSelectionWidget = CreateWidget<UUserWidget>(PC, UnitSelectionWidgetClass);
+        if (UnitSelectionWidget)
+        {
+            // Trova i pulsanti nel widget
+            UButton* SniperButton = Cast<UButton>(UnitSelectionWidget->GetWidgetFromName(TEXT("SniperButton")));
+            UButton* BrawlerButton = Cast<UButton>(UnitSelectionWidget->GetWidgetFromName(TEXT("BrawlerButton")));
+
+            // Collega i pulsanti direttamente alle funzioni
+            if (SniperButton)
+            {
+                SniperButton->OnClicked.AddDynamic(this, &ASaT_HumanPlayer::OnUnitWidgetSniperSelected);
+                UE_LOG(LogTemp, Display, TEXT("SniperButton trovato e collegato alla funzione"));
+            }
+            else
+            {
+                UE_LOG(LogTemp, Warning, TEXT("SniperButton non trovato nel widget!"));
+            }
+
+            if (BrawlerButton)
+            {
+                BrawlerButton->OnClicked.AddDynamic(this, &ASaT_HumanPlayer::OnUnitWidgetBrawlerSelected);
+                UE_LOG(LogTemp, Display, TEXT("BrawlerButton trovato e collegato alla funzione"));
+            }
+            else
+            {
+                UE_LOG(LogTemp, Warning, TEXT("BrawlerButton non trovato nel widget!"));
+            }
+
+            // Mostra il widget
+            UnitSelectionWidget->AddToViewport();
+
+            // Imposta il focus sul widget e mostra il cursore
+            PC->SetInputMode(FInputModeUIOnly());
+            PC->bShowMouseCursor = true;
+        }
+        else
+        {
+            //UE_LOG(LogTemp, Error, TEXT("Impossibile creare il widget di selezione unità!"));
+        }
+    }
+}
+
+void ASaT_HumanPlayer::OnUnitWidgetSniperSelected()
 {
     // Nasconde il widget
     if (UnitSelectionWidget)
     {
-        UnitSelectionWidget->RemoveFromParent(); // Usa RemoveFromParent invece di RemoveFromViewport
+        UnitSelectionWidget->RemoveFromParent();
+        UnitSelectionWidget = nullptr;
+    }
 
-        // Ripristina la modalità di input normale
-        APlayerController* PC = GetWorld()->GetFirstPlayerController();
-        if (PC)
-        {
-            PC->SetInputMode(FInputModeGameOnly());
-            PC->bShowMouseCursor = false;
-        }
+    // Ripristina la modalità di input normale
+    APlayerController* PC = GetWorld()->GetFirstPlayerController();
+    if (PC)
+    {
+        PC->SetInputMode(FInputModeGameOnly());
+        PC->bShowMouseCursor = true; // Mantieni il cursore visibile
     }
 
     // Piazza lo Sniper alle coordinate selezionate
     PlaceUnit(SelectedGridX, SelectedGridY, true);
-}*/
+}
 
-/*void ASaT_HumanPlayer::OnUnitWidgetBrawlerSelected()
+void ASaT_HumanPlayer::OnUnitWidgetBrawlerSelected()
 {
     // Nasconde il widget
     if (UnitSelectionWidget)
     {
-        UnitSelectionWidget->RemoveFromParent(); // Usa RemoveFromParent invece di RemoveFromViewport
+        UnitSelectionWidget->RemoveFromParent();
+        UnitSelectionWidget = nullptr;
+    }
 
-        // Ripristina la modalità di input normale
-        APlayerController* PC = GetWorld()->GetFirstPlayerController();
-        if (PC)
-        {
-            PC->SetInputMode(FInputModeGameOnly());
-            PC->bShowMouseCursor = false;
-        }
+    // Ripristina la modalità di input normale
+    APlayerController* PC = GetWorld()->GetFirstPlayerController();
+    if (PC)
+    {
+        PC->SetInputMode(FInputModeGameOnly());
+        PC->bShowMouseCursor = true; // Mantieni il cursore visibile
     }
 
     // Piazza il Brawler alle coordinate selezionate
     PlaceUnit(SelectedGridX, SelectedGridY, false);
-}*/
+}
 
 void ASaT_HumanPlayer::PlaceUnit(int32 GridX, int32 GridY, bool bIsSniper)
 {

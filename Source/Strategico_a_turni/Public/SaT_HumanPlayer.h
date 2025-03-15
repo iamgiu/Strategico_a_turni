@@ -8,6 +8,7 @@
 #include "SaT_PlayerInterface.h"
 #include "SaT_GameInstance.h"
 #include "SaT_Enums.h"
+#include "Blueprint/UserWidget.h"
 #include "SaT_HumanPlayer.generated.h"
 
 // Forward declarations
@@ -67,18 +68,21 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Setup")
     void SetUnitsToPlace(int32 InUnitsToPlace) { UnitsToPlace = InUnitsToPlace; }
 
-    //UPROPERTY(EditDefaultsOnly, Category = "UI")
-    //TSubclassOf<class UUserWidget> UnitSelectionWidgetClass;
+    UPROPERTY(EditDefaultsOnly, Category = "UI")
+    TSubclassOf<UUserWidget> UnitSelectionWidgetClass;
 
-    //UPROPERTY()
-    //class UUserWidget* UnitSelectionWidget;
+    UPROPERTY()
+    UUserWidget* UnitSelectionWidget;
 
-    // Funzioni per gestire le selezioni
-    //UFUNCTION(BlueprintCallable, Category = "Unit Selection")
-    //void OnUnitWidgetSniperSelected();
+    UFUNCTION(BlueprintCallable, Category = "Unit Selection")
+    void OnUnitWidgetSniperSelected();
 
-    //UFUNCTION(BlueprintCallable, Category = "Unit Selection")
-    //void OnUnitWidgetBrawlerSelected();
+    UFUNCTION(BlueprintCallable, Category = "Unit Selection")
+    void OnUnitWidgetBrawlerSelected();
+
+    // Aggiungere questa nuova funzione
+    UFUNCTION(BlueprintCallable, Category = "Unit Selection")
+    void ShowUnitSelectionWidget();
 
 protected:
     virtual void BeginPlay() override;
