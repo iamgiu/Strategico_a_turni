@@ -91,7 +91,6 @@ FVector2D AGridManager::GetXYPositionByRelativeLocation(const FVector& Location)
 {
 	const double XPos = Location.X / (TileSize * NextCellPositionMultiplier);
 	const double YPos = Location.Y / (TileSize * NextCellPositionMultiplier);
-	// GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Blue, FString::Printf(TEXT("x=%f,y=%f"), XPos, YPos));
 	return FVector2D(XPos, YPos);
 }
 
@@ -221,13 +220,13 @@ void AGridManager::OccupyCell(int32 GridX, int32 GridY, AUnit* Unit)
 
 FVector AGridManager::GetWorldLocationFromGrid(int32 GridX, int32 GridY)
 {
-	// Calcolo diretto senza trasformazione
-	FVector WorldLocation = FVector(GridX * TileSize, GridY * TileSize, 0.0f);
+	// Usa NextCellPositionMultiplier per mantenere coerenza con il resto del codice
+	FVector WorldLocation = GetRelativeLocationByXYPosition(GridX-1, GridY-1);
 
-	// Aggiungi offset verticale
-	WorldLocation.Z += 50.0f;  // Valore maggiore per rendere l'unità più visibile
+	// Aggiungi offset verticale per rendere l'unità visibile sopra il tile
+	WorldLocation.Z += 50.0f;
 
-	UE_LOG(LogTemp, Warning, TEXT("Posizione mondo diretta: X=%f, Y=%f, Z=%f"),
+	UE_LOG(LogTemp, Warning, TEXT("Posizione mondo calcolata: X=%f, Y=%f, Z=%f"),
 		WorldLocation.X, WorldLocation.Y, WorldLocation.Z);
 
 	return WorldLocation;

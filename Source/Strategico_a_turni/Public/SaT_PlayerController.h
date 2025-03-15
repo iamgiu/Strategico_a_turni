@@ -35,4 +35,12 @@ protected:
 	virtual void BeginPlay() override;
 
 	virtual void SetupInputComponent() override;
+
+	// Funzioni per il movimento della camera
+	void PanCameraX(float Value);
+	void PanCameraY(float Value);
+
+	// Velocità di movimento della camera
+	UPROPERTY(EditAnywhere, Category = "Camera")
+	float CameraPanSpeed = 500.0f;
 };

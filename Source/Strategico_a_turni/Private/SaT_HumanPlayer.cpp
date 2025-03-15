@@ -20,13 +20,18 @@ ASaT_HumanPlayer::ASaT_HumanPlayer()
     Camera = CreateDefaultSubobject<UCameraComponent>(TEXT("Camera"));
     SetRootComponent(Camera);
 
-    // Posiziona e ruota la camera per una vista dall'alto
-    Camera->SetRelativeLocation(FVector(0, 0, 700));
-    Camera->SetRelativeRotation(FRotator(180, 0, 0));
-
-    // Imposta la camera in modalità ortografica per una vista 2D
+    // Configurazione della camera per la visuale ortografica
+    Camera->SetRelativeRotation(FRotator(-90, 0, 0)); // Guarda verso il basso
     Camera->ProjectionMode = ECameraProjectionMode::Orthographic;
-    Camera->OrthoWidth = 2775.0f;  // Regola in base alla dimensione della griglia
+
+    // Calcola l'OrthoWidth in base alla dimensione della griglia
+    // Assumiamo un TileSize di 100 e una griglia 25x25
+    float GridSize = 25 * 100.0f;
+    Camera->OrthoWidth = GridSize * 2.1f; // Un po' di margine intorno alla griglia
+
+    // Altezza della camera - abbastanza alta da vedere tutto il campo
+    float CameraHeight = 2000.0f;
+    Camera->SetRelativeLocation(FVector(GridSize / 2, GridSize / 2, CameraHeight));
 }
 
 void ASaT_HumanPlayer::BeginPlay()
@@ -38,17 +43,30 @@ void ASaT_HumanPlayer::BeginPlay()
     CurrentPhase = EGamePhase::SETUP;
     UnitsToPlace = 2;
 
-    // Trova il GridManager nella scena
+    // Trova il GridManager
     TArray<AActor*> FoundGrids;
     UGameplayStatics::GetAllActorsOfClass(GetWorld(), AGridManager::StaticClass(), FoundGrids);
     if (FoundGrids.Num() > 0)
     {
         GridManager = Cast<AGridManager>(FoundGrids[0]);
-        UE_LOG(LogTemp, Display, TEXT("GridManager trovato e assegnato"));
-    }
-    else
-    {
-        UE_LOG(LogTemp, Warning, TEXT("GridManager non trovato nella scena!"));
+        if (GridManager)
+        {
+            UE_LOG(LogTemp, Display, TEXT("GridManager trovato e assegnato"));
+
+            // Posiziona la camera sopra il centro della griglia
+            float GridSize = GridManager->Size * GridManager->TileSize;
+            float CameraHeight = 2000.0f;
+
+            // Posiziona la camera al centro della griglia
+            SetActorLocation(FVector(GridSize / 2, GridSize / 2, CameraHeight));
+
+            UE_LOG(LogTemp, Warning, TEXT("Camera posizionata al centro della griglia: X=%f, Y=%f, Z=%f"),
+                GridSize / 2, GridSize / 2, CameraHeight);
+        }
+        else
+        {
+            UE_LOG(LogTemp, Warning, TEXT("GridManager non trovato nella scena!"));
+        }
     }
 }
 
@@ -179,8 +197,8 @@ void ASaT_HumanPlayer::OnClick()
 
 void ASaT_HumanPlayer::PlaceUnit(int32 GridX, int32 GridY, bool bIsSniper)
 {
-    // Aggiungi log di debug per vedere le coordinate
-    UE_LOG(LogTemp, Warning, TEXT("Tentativo di piazzare unità in griglia: X=%d, Y=%d"), GridX, GridY);
+    // Aggiungi log dettagliati
+    UE_LOG(LogTemp, Warning, TEXT("PlaceUnit chiamato con coordinate: X=%d, Y=%d"), GridX, GridY);
 
     // Controlla che le coordinate siano all'interno della griglia
     if (GridX < 0 || GridX >= 25 || GridY < 0 || GridY >= 25)
@@ -191,16 +209,20 @@ void ASaT_HumanPlayer::PlaceUnit(int32 GridX, int32 GridY, bool bIsSniper)
 
     // Calcola la posizione 3D dalla griglia
     FVector SpawnLocation;
-    // Se GridManager è valido, usa la sua funzione per ottenere la posizione nel mondo
     if (GridManager)
     {
         SpawnLocation = GridManager->GetWorldLocationFromGrid(GridX, GridY);
+        UE_LOG(LogTemp, Warning, TEXT("Posizione di spawn calcolata: X=%f, Y=%f, Z=%f"),
+            SpawnLocation.X, SpawnLocation.Y, SpawnLocation.Z);
     }
     else
     {
         // Fallback se GridManager non è valido
         SpawnLocation = FVector(GridX * 100.0f, GridY * 100.0f, 0.0f);
+        UE_LOG(LogTemp, Warning, TEXT("GridManager non valido! Usando fallback: X=%f, Y=%f, Z=%f"),
+            SpawnLocation.X, SpawnLocation.Y, SpawnLocation.Z);
     }
+
     // Crea l'unità appropriata
     FActorSpawnParameters SpawnParams;
     SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
