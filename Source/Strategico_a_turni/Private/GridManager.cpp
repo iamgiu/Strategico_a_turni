@@ -220,32 +220,43 @@ void AGridManager::OccupyCell(int32 GridX, int32 GridY, AUnit* Unit)
 
 FVector AGridManager::GetWorldLocationFromGrid(int32 GridX, int32 GridY)
 {
-    // Trova il tile alle coordinate specificate
-    if (TileMap.Contains(FVector2D(GridX, GridY)))
-    {
-        ATile* Tile = TileMap[FVector2D(GridX-1, GridY-1)];
-        if (Tile)
-        {
-            // Usa la posizione esatta del tile
-            FVector TileLocation = Tile->GetActorLocation();
-            // Aggiungi offset Z per rendere l'unità visibile sopra il tile
-            TileLocation.Z += 50.0f;
-            
-            UE_LOG(LogTemp, Warning, TEXT("Posizione mondo calcolata da tile: X=%f, Y=%f, Z=%f"),
-                TileLocation.X, TileLocation.Y, TileLocation.Z);
-                
-            return TileLocation;
-        }
-    }
-    
-    // Fallback al calcolo matematico se il tile non esiste
-    FVector WorldLocation = GetRelativeLocationByXYPosition(GridX, GridY);
-    WorldLocation.Z += 50.0f;
-    
-    UE_LOG(LogTemp, Warning, TEXT("Posizione mondo calcolata matematicamente: X=%f, Y=%f, Z=%f"),
-        WorldLocation.X, WorldLocation.Y, WorldLocation.Z);
-        
-    return WorldLocation;
+	// Check if the grid coordinates are valid
+	if (GridX < 0 || GridX >= Size || GridY < 0 || GridY >= Size) {
+		UE_LOG(LogTemp, Error, TEXT("Invalid grid coordinates: X=%d, Y=%d"), GridX, GridY);
+		// Return a default position if coordinates are invalid
+		return FVector(0, 0, 50.0f);
+	}
+
+	// Find the tile at the specified coordinates - DO NOT subtract 1
+	FVector2D GridPosition(GridX, GridY);
+	if (TileMap.Contains(GridPosition))
+	{
+		ATile* Tile = TileMap[GridPosition];
+		if (Tile)
+		{
+			// Use the exact position of the tile
+			FVector TileLocation = Tile->GetActorLocation();
+			// Add Z offset to make the unit visible above the tile
+			TileLocation.Z += 50.0f;
+
+			UE_LOG(LogTemp, Warning, TEXT("World position calculated from tile: X=%f, Y=%f, Z=%f"),
+				TileLocation.X, TileLocation.Y, TileLocation.Z);
+
+			return TileLocation;
+		}
+	}
+
+	// Fallback to mathematical calculation if the tile doesn't exist
+	FVector WorldLocation = GetRelativeLocationByXYPosition(GridX, GridY);
+	// Add TileSize/2 to get the center of the cell
+	WorldLocation.X += TileSize / 2.0f;
+	WorldLocation.Y += TileSize / 2.0f;
+	WorldLocation.Z += 50.0f;
+
+	UE_LOG(LogTemp, Warning, TEXT("World position calculated mathematically: X=%f, Y=%f, Z=%f"),
+		WorldLocation.X, WorldLocation.Y, WorldLocation.Z);
+
+	return WorldLocation;
 }
 
 /*FVector AGridManager::GetWorldLocationFromGrid(int32 GridX, int32 GridY)
@@ -268,4 +279,3 @@ FVector AGridManager::GetWorldLocationFromGrid(int32 GridX, int32 GridY)
 //	Super::Tick(DeltaTime);
 //
 //}
-

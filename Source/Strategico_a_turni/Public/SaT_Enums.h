@@ -17,8 +17,8 @@ enum class EPieceUnit : uint8
 UENUM(BlueprintType)
 enum class EPlayerType : uint8
 {
-	Human UMETA(DisplayName = "Human"),
-	AI UMETA(DisplayName = "AI")
+	Human UMETA(DisplayName = "Human"), //0
+	AI UMETA(DisplayName = "AI") //1
 };
 
 UENUM()
