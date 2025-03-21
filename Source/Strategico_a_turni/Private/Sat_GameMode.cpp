@@ -89,11 +89,9 @@ void ASaT_GameMode::BeginPlay()
         UE_LOG(LogTemp, Warning, TEXT("GridManager is valid, scheduling game start..."));
         FTimerHandle TimerHandle;
         GetWorldTimerManager().SetTimer(TimerHandle, this, &ASaT_GameMode::StartGame, 2.0f, false);
-        UE_LOG(LogTemp, Warning, TEXT("Game will auto-start in 2 seconds..."));
-    }
-    else
-    {
-        UE_LOG(LogTemp, Error, TEXT("Cannot schedule game start: GridManager is NULL!"));
+
+        // Set game to SETUP phase first, not directly to PLAYING
+        GameInstance = Cast<USaT_GameInstance>(UGameplayStatics::GetGameInstance(GetWorld()));
     }
 }
 
@@ -106,52 +104,65 @@ void ASaT_GameMode::InitializePlayers()
     // Clear any existing players
     Players.Empty();
 
-    // Track if we've already added a human and AI player
-    bool bHumanPlayerAdded = false;
-    bool bAIPlayerAdded = false;
+    // Find and store human and AI players separately
+    ISaT_PlayerInterface* HumanPlayerInterface = nullptr;
+    ISaT_PlayerInterface* AIPlayerInterface = nullptr;
 
-    // Add one human player and one AI player
     for (AActor* Actor : FoundPlayers)
     {
         ISaT_PlayerInterface* PlayerInterface = Cast<ISaT_PlayerInterface>(Actor);
         if (PlayerInterface)
         {
-            if (Cast<ASaT_HumanPlayer>(Actor) && !bHumanPlayerAdded)
+            if (Cast<ASaT_HumanPlayer>(Actor))
             {
-                // Add human player
-                Players.Add(PlayerInterface);
-                PlayerInterface->PlayerNumber = 0;
-                PlayerInterface->Color = EPieceColor::BLUE;
-                bHumanPlayerAdded = true;
-                UE_LOG(LogTemp, Warning, TEXT("Human Player added to game (index 0)"));
+                HumanPlayerInterface = PlayerInterface;
+                UE_LOG(LogTemp, Warning, TEXT("Found Human Player: %s"), *Actor->GetName());
             }
-            else if (Cast<ASaT_RandomPlayer>(Actor) && !bAIPlayerAdded)
+            else if (Cast<ASaT_RandomPlayer>(Actor))
             {
-                // Add AI player
-                Players.Add(PlayerInterface);
-                PlayerInterface->PlayerNumber = 1;
-                PlayerInterface->Color = EPieceColor::RED;
-                bAIPlayerAdded = true;
-                UE_LOG(LogTemp, Warning, TEXT("AI Player added to game (index 1)"));
-            }
-
-            // Set the GameInstance reference
-            USaT_GameInstance* GameInstance = Cast<USaT_GameInstance>(UGameplayStatics::GetGameInstance(GetWorld()));
-            if (GameInstance)
-            {
-                PlayerInterface->GameInstance = GameInstance;
+                AIPlayerInterface = PlayerInterface;
+                UE_LOG(LogTemp, Warning, TEXT("Found AI Player: %s"), *Actor->GetName());
             }
         }
     }
 
-    if (Players.Num() >= MIN_NUMBER_SPAWN_PLAYERS)
+    // Add players to array in the CORRECT ORDER
+    // IMPORTANT: Human MUST be index 0, AI MUST be index 1
+    if (HumanPlayerInterface)
     {
-        UE_LOG(LogTemp, Warning, TEXT("Successfully initialized %d players (1 Human, 1 AI)"), Players.Num());
+        Players.Add(HumanPlayerInterface);
+        HumanPlayerInterface->PlayerNumber = 0;
+        HumanPlayerInterface->Color = EPieceColor::BLUE;
+        UE_LOG(LogTemp, Warning, TEXT("Human Player added to game (index 0)"));
     }
-    else
+
+    if (AIPlayerInterface)
     {
-        UE_LOG(LogTemp, Error, TEXT("Not enough players found! Need at least %d players, found %d."),
-            MIN_NUMBER_SPAWN_PLAYERS, Players.Num());
+        Players.Add(AIPlayerInterface);
+        AIPlayerInterface->PlayerNumber = 1;
+        AIPlayerInterface->Color = EPieceColor::RED;
+        UE_LOG(LogTemp, Warning, TEXT("AI Player added to game (index 1)"));
+    }
+
+    // Set the GameInstance reference for all players
+    USaT_GameInstance* GameInstance = Cast<USaT_GameInstance>(UGameplayStatics::GetGameInstance(GetWorld()));
+    if (GameInstance)
+    {
+        for (auto& Player : Players)
+        {
+            Player->GameInstance = GameInstance;
+        }
+    }
+
+    // Verify our player array is correctly initialized
+    UE_LOG(LogTemp, Warning, TEXT("Successfully initialized %d players (1 Human, 1 AI)"), Players.Num());
+    for (int32 i = 0; i < Players.Num(); i++)
+    {
+        bool bIsHuman = Cast<ASaT_HumanPlayer>(Players[i]->_getUObject()) != nullptr;
+        UE_LOG(LogTemp, Warning, TEXT("Player[%d]: Type=%s, PlayerNumber=%d"),
+            i,
+            bIsHuman ? TEXT("Human") : TEXT("AI"),
+            Players[i]->PlayerNumber);
     }
 }
 
@@ -189,15 +200,17 @@ void ASaT_GameMode::StartGame()
 
     UE_LOG(LogTemp, Warning, TEXT("GridManager and Players are valid. Starting game..."));
 
+
+
     // Flip a coin to decide who goes first
     FlipCoinToDecideFirstPlayer();
 
     // Set game to playing phase
     USaT_GameInstance* GameInstance = Cast<USaT_GameInstance>(UGameplayStatics::GetGameInstance(GetWorld()));
-    if (GameInstance)
-    {
-        GameInstance->SetGamePhase(EGamePhase::PLAYING);
-        UE_LOG(LogTemp, Warning, TEXT("Game phase set to PLAYING"));
+
+    if (GameInstance) {
+        GameInstance->SetGamePhase(EGamePhase::SETUP);
+        UE_LOG(LogTemp, Warning, TEXT("Game phase set to SETUP"));
     }
 
     // Start first turn
@@ -211,10 +224,7 @@ void ASaT_GameMode::FlipCoinToDecideFirstPlayer()
     UE_LOG(LogTemp, Warning, TEXT("===== FLIPPING COIN TO DECIDE FIRST PLAYER ====="));
 
     // Simple random 50/50 chance to determine who goes first
-    bool bFirstPlayerWinsFlip = FMath::RandBool();
-
-    // Set the current player based on the coin flip
-    CurrentPlayer = bFirstPlayerWinsFlip ? 0 : 1;
+    bool bHumanWinsFlip = FMath::RandBool();
 
     // Make sure we have valid players
     if (Players.Num() < 2)
@@ -223,110 +233,135 @@ void ASaT_GameMode::FlipCoinToDecideFirstPlayer()
         return;
     }
 
-    // Determine player type and announce the result
-    if (Players.IsValidIndex(CurrentPlayer))
-    {
-        AActor* PlayerActor = Cast<AActor>(Players[CurrentPlayer]);
-        if (Cast<ASaT_HumanPlayer>(PlayerActor))
-        {
-            CurrentPlayerType = EPlayerType::Human;
-            UE_LOG(LogTemp, Warning, TEXT("*** COIN FLIP RESULT: HUMAN player goes first (Player index: %d) ***"), CurrentPlayer);
-        }
-        else
-        {
-            CurrentPlayerType = EPlayerType::AI;
-            UE_LOG(LogTemp, Warning, TEXT("*** COIN FLIP RESULT: AI player goes first (Player index: %d) ***"), CurrentPlayer);
-        }
-
-        // Set the current player as active
-        for (int32 i = 0; i < Players.Num(); i++)
-        {
-            Players[i]->IsMyTurn = (i == CurrentPlayer);
-            UE_LOG(LogTemp, Warning, TEXT("Player %d IsMyTurn = %s"), i, Players[i]->IsMyTurn ? TEXT("TRUE") : TEXT("FALSE"));
-        }
-    }
-    else
-    {
-        UE_LOG(LogTemp, Error, TEXT("Invalid CurrentPlayer index: %d (Players count: %d)"), CurrentPlayer, Players.Num());
-    }
-}
-
-void ASaT_GameMode::StartFirstTurn()
-{
-    // Ensure we have valid players
-    if (Players.Num() >= MIN_NUMBER_SPAWN_PLAYERS && Players.IsValidIndex(CurrentPlayer))
-    {
-        // Set the current player as active
-        for (int32 i = 0; i < Players.Num(); i++)
-        {
-            Players[i]->IsMyTurn = (i == CurrentPlayer);
-        }
-
-        // Notify current player it's their turn
-        Players[CurrentPlayer]->OnTurn();
-
-        UE_LOG(LogTemp, Display, TEXT("First turn started for Player %d"), CurrentPlayer + 1);
-    }
-}
-
-void ASaT_GameMode::TurnNextPlayer()
-{
-    // Make sure current player is no longer in their turn
-    if (Players.IsValidIndex(CurrentPlayer))
-    {
-        Players[CurrentPlayer]->IsMyTurn = false;
-    }
-
     // Get the GameInstance
     USaT_GameInstance* GameInstance = Cast<USaT_GameInstance>(UGameplayStatics::GetGameInstance(GetWorld()));
     if (!GameInstance)
     {
-        UE_LOG(LogTemp, Error, TEXT("TurnNextPlayer: GameInstance not found."));
+        UE_LOG(LogTemp, Error, TEXT("GameInstance not found in FlipCoinToDecideFirstPlayer!"));
         return;
     }
 
-    // Use GameInstance to switch turns
-    GameInstance->SwitchTurn();
+    // CRITICAL FIX: Update GameInstance's turn state and call its built-in coin toss function
+    GameInstance->bPlayerStartsFirst = bHumanWinsFlip;
+    GameInstance->bIsPlayerTurn = bHumanWinsFlip;
 
-    // Update current player based on GameInstance state
-    CurrentPlayer = GameInstance->bIsPlayerTurn ? 0 : 1;
+    // Sync GameMode's state with GameInstance
+    CurrentPlayer = bHumanWinsFlip ? 0 : 1; // 0 = Human, 1 = AI
+    CurrentPlayerType = bHumanWinsFlip ? EPlayerType::Human : EPlayerType::AI;
 
-    // Update player type
-    AActor* PlayerActor = Cast<AActor>(Players[CurrentPlayer]);
-    if (Cast<ASaT_HumanPlayer>(PlayerActor))
+    // Log the result more clearly
+    UE_LOG(LogTemp, Warning, TEXT("*** COIN FLIP RESULT: %s player goes first (Player index: %d) ***"),
+        bHumanWinsFlip ? TEXT("HUMAN") : TEXT("AI"),
+        CurrentPlayer);
+
+    // Log the GameInstance state after coin flip
+    UE_LOG(LogTemp, Warning, TEXT("GameInstance bPlayerStartsFirst = %s, bIsPlayerTurn = %s, GameMode CurrentPlayer = %d"),
+        GameInstance->bPlayerStartsFirst ? TEXT("TRUE (Human)") : TEXT("FALSE (AI)"),
+        GameInstance->bIsPlayerTurn ? TEXT("TRUE (Human)") : TEXT("FALSE (AI)"),
+        CurrentPlayer);
+}
+
+void ASaT_GameMode::StartFirstTurn()
+{
+    UE_LOG(LogTemp, Warning, TEXT("===== STARTING FIRST TURN ====="));
+
+    // Get the game instance to verify turn state
+    USaT_GameInstance* GameInstance = Cast<USaT_GameInstance>(UGameplayStatics::GetGameInstance(GetWorld()));
+    if (!GameInstance)
     {
-        CurrentPlayerType = EPlayerType::Human;
+        UE_LOG(LogTemp, Error, TEXT("GameInstance not found in StartFirstTurn!"));
+        return;
     }
-    else
+
+    // CRITICAL FIX: Ensure GameMode's CurrentPlayer is synchronized with GameInstance
+    bool bHumanGoesFirst = GameInstance->bPlayerStartsFirst;
+    bool bIsHumanTurn = GameInstance->bIsPlayerTurn;
+
+    // Verify these values are consistent
+    if (bHumanGoesFirst != bIsHumanTurn)
     {
-        CurrentPlayerType = EPlayerType::AI;
+        UE_LOG(LogTemp, Error, TEXT("GameInstance turn state inconsistency! bPlayerStartsFirst=%s but bIsPlayerTurn=%s"),
+            bHumanGoesFirst ? TEXT("TRUE") : TEXT("FALSE"),
+            bIsHumanTurn ? TEXT("TRUE") : TEXT("FALSE"));
+
+        // Correct the inconsistency by making bIsPlayerTurn match bPlayerStartsFirst
+        GameInstance->bIsPlayerTurn = GameInstance->bPlayerStartsFirst;
+        bIsHumanTurn = GameInstance->bIsPlayerTurn;
     }
 
-    // Set new player's turn
-    Players[CurrentPlayer]->IsMyTurn = true;
+    // Update GameMode state to match GameInstance
+    CurrentPlayer = bIsHumanTurn ? 0 : 1;
+    CurrentPlayerType = bIsHumanTurn ? EPlayerType::Human : EPlayerType::AI;
 
-    // Notify the player
-    Players[CurrentPlayer]->OnTurn();
+    UE_LOG(LogTemp, Warning, TEXT("First turn starting for %s player (index %d)"),
+        CurrentPlayerType == EPlayerType::Human ? TEXT("Human") : TEXT("AI"),
+        CurrentPlayer);
 
-    UE_LOG(LogTemp, Display, TEXT("Turn switched to Player %d"), CurrentPlayer + 1);
+    // Update the player IsMyTurn flags based on CurrentPlayer
+    for (int32 i = 0; i < Players.Num(); i++)
+    {
+        // Only the current player should have IsMyTurn = true
+        Players[i]->IsMyTurn = (i == CurrentPlayer);
+
+        UE_LOG(LogTemp, Warning, TEXT("StartFirstTurn: Player %d IsMyTurn set to %s"),
+            i, Players[i]->IsMyTurn ? TEXT("TRUE") : TEXT("FALSE"));
+    }
+
+    // Clear any pending timers
+    GetWorldTimerManager().ClearAllTimersForObject(this);
+
+    // Add a short delay before notifying the current player
+    FTimerHandle TimerHandle;
+    GetWorldTimerManager().SetTimer(TimerHandle, this, &ASaT_GameMode::NotifyCurrentPlayerTurn, 0.5f, false);
 }
 
 void ASaT_GameMode::EndTurn()
 {
+    UE_LOG(LogTemp, Warning, TEXT("===== END TURN CALLED ====="));
+
     // Check if game is over before switching turns
     if (CheckGameOver())
     {
-        UE_LOG(LogTemp, Display, TEXT("Game is over!"));
+        UE_LOG(LogTemp, Display, TEXT("Game is over! Not switching turns."));
         return;
     }
 
-    // Switch to next player
-    TurnNextPlayer();
+    // Get the current game phase from GameInstance
+    USaT_GameInstance* GameInstance = Cast<USaT_GameInstance>(UGameplayStatics::GetGameInstance(GetWorld()));
+    if (!GameInstance)
+    {
+        UE_LOG(LogTemp, Error, TEXT("Failed to get GameInstance in EndTurn!"));
+        return;
+    }
+
+    // First, make sure current player is no longer in their turn
+    if (Players.IsValidIndex(CurrentPlayer))
+    {
+        Players[CurrentPlayer]->IsMyTurn = false;
+        UE_LOG(LogTemp, Warning, TEXT("Setting Player %d IsMyTurn to FALSE"), CurrentPlayer);
+    }
+
+    // Let GameInstance handle turn switching
+    UE_LOG(LogTemp, Warning, TEXT("Telling GameInstance to switch turns"));
+    GameInstance->SwitchTurn();
+
+    // After switching, update our CurrentPlayer based on the new GameInstance state
+    bool bIsHumanTurn = GameInstance->bIsPlayerTurn;
+    CurrentPlayer = bIsHumanTurn ? 0 : 1;
+    CurrentPlayerType = bIsHumanTurn ? EPlayerType::Human : EPlayerType::AI;
+
+    UE_LOG(LogTemp, Warning, TEXT("After turn switch - Current turn is now: %s (player index %d)"),
+        bIsHumanTurn ? TEXT("HUMAN") : TEXT("AI"),
+        CurrentPlayer);
+
+    // Schedule notification for the next player
+    FTimerHandle TimerHandle;
+    GetWorldTimerManager().SetTimer(TimerHandle, this, &ASaT_GameMode::NotifyCurrentPlayerTurn, 0.1f, false);
 }
 
 bool ASaT_GameMode::CheckGameOver()
 {
-    if (bIsGameOver)
+   /* if (bIsGameOver)
     {
         return true;
     }
@@ -375,7 +410,96 @@ bool ASaT_GameMode::CheckGameOver()
             UE_LOG(LogTemp, Display, TEXT("Game over! Player %d wins, Player %d loses"), WinnerIndex + 1, i + 1);
             return true;
         }
-    }
+    }*/
 
     return false;
+}
+
+void ASaT_GameMode::TurnNextPlayer()
+{
+    UE_LOG(LogTemp, Warning, TEXT("===== TURNING NEXT PLAYER ====="));
+
+    // This method shouldn't be called anymore - redirect to EndTurn
+    UE_LOG(LogTemp, Warning, TEXT("TurnNextPlayer called - redirecting to EndTurn for consistency"));
+    EndTurn();
+}
+
+void ASaT_GameMode::NotifyCurrentPlayerTurn()
+{
+    // DEBUGGING
+    UE_LOG(LogTemp, Warning, TEXT("==== DEBUG: NotifyCurrentPlayerTurn ENTRY ===="));
+    UE_LOG(LogTemp, Warning, TEXT("CurrentPlayer=%d, Players.Num()=%d"), CurrentPlayer, Players.Num());
+
+    // Print info about each player
+    for (int32 i = 0; i < Players.Num(); i++)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("Player[%d]: IsMyTurn=%s, Type=%s"),
+            i,
+            Players[i]->IsMyTurn ? TEXT("TRUE") : TEXT("FALSE"),
+            Cast<ASaT_HumanPlayer>(Players[i]->_getUObject()) ? TEXT("Human") : TEXT("AI"));
+    }
+
+    // Get the GameInstance
+    USaT_GameInstance* GameInstance = Cast<USaT_GameInstance>(UGameplayStatics::GetGameInstance(GetWorld()));
+    if (!GameInstance)
+    {
+        UE_LOG(LogTemp, Error, TEXT("GameInstance not found in NotifyCurrentPlayerTurn!"));
+        return;
+    }
+
+    // CRITICAL FIX: Always ensure CurrentPlayer matches GameInstance state
+    bool bIsHumanTurn = GameInstance->bIsPlayerTurn;
+    int32 ExpectedPlayerIndex = bIsHumanTurn ? 0 : 1;
+
+    // If there's a mismatch, correct it
+    if (CurrentPlayer != ExpectedPlayerIndex)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("Correcting player index mismatch! CurrentPlayer=%d but GameInstance says %s turn"),
+            CurrentPlayer, bIsHumanTurn ? TEXT("Human") : TEXT("AI"));
+
+        CurrentPlayer = ExpectedPlayerIndex;
+        CurrentPlayerType = bIsHumanTurn ? EPlayerType::Human : EPlayerType::AI;
+    }
+
+    // Safety check on array bounds
+    if (!Players.IsValidIndex(CurrentPlayer))
+    {
+        UE_LOG(LogTemp, Error, TEXT("NotifyCurrentPlayerTurn: Invalid player index %d"), CurrentPlayer);
+        return;
+    }
+
+    // Update all player turn flags to be consistent
+    for (int32 i = 0; i < Players.Num(); i++)
+    {
+        Players[i]->IsMyTurn = (i == CurrentPlayer);
+    }
+
+    ISaT_PlayerInterface* PlayerToNotify = Players[CurrentPlayer];
+    if (PlayerToNotify)
+    {
+
+        UE_LOG(LogTemp, Warning, TEXT("Directly notifying player at index %d - IsHuman: %s"),
+            CurrentPlayer, bIsHumanTurn ? TEXT("TRUE") : TEXT("FALSE"));
+
+        // Double-check one more time - is this really the right player?
+        bool bIsPlayerHuman = (Cast<ASaT_HumanPlayer>(PlayerToNotify->_getUObject()) != nullptr);
+
+        if (bIsPlayerHuman == bIsHumanTurn)
+        {
+            // The player type matches the turn state - go ahead and notify
+            PlayerToNotify->OnTurn();
+        }
+        else
+        {
+            // We have a mismatch! Log it and abort this notification
+            UE_LOG(LogTemp, Error, TEXT("TURN STATE MISMATCH! Trying to notify %s player when it's %s turn!"),
+                bIsPlayerHuman ? TEXT("Human") : TEXT("AI"),
+                bIsHumanTurn ? TEXT("Human") : TEXT("AI"));
+        }
+    }
+    else
+    {
+        UE_LOG(LogTemp, Error, TEXT("PlayerToNotify is null!"));
+    }
+
 }

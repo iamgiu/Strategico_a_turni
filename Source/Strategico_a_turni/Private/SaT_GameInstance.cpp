@@ -1,6 +1,9 @@
 // Fill out your copyright notice in the Description page of Project Settings.
 
 
+// Fill out your copyright notice in the Description page of Project Settings.
+
+
 #include "SaT_GameInstance.h"
 #include "Kismet/GameplayStatics.h"
 
@@ -10,6 +13,8 @@ USaT_GameInstance::USaT_GameInstance()
     bPlayerStartsFirst = true;
     bIsPlayerTurn = true;
     CurrentPhase = EGamePhase::SETUP;
+    HumanUnitsPlaced = 0;
+    AIUnitsPlaced = 0;
 }
 
 void USaT_GameInstance::TossCoin()
@@ -41,13 +46,44 @@ void USaT_GameInstance::TossCoin()
 
 void USaT_GameInstance::SwitchTurn()
 {
-    // Only switch turns if we're in the playing phase
-    if (CurrentPhase == EGamePhase::PLAYING)
+    // Log the current state before switching
+    UE_LOG(LogTemp, Warning, TEXT("===== SWITCHING TURNS ====="));
+    UE_LOG(LogTemp, Warning, TEXT("BEFORE SWITCH - Current turn: %s, Phase: %s"),
+        bIsPlayerTurn ? TEXT("Human Player") : TEXT("AI Player"),
+        CurrentPhase == EGamePhase::SETUP ? TEXT("SETUP") :
+        CurrentPhase == EGamePhase::PLAYING ? TEXT("PLAYING") : TEXT("GAMEOVER"));
+
+    // Always toggle the turn flag regardless of phase
+    bIsPlayerTurn = !bIsPlayerTurn;
+
+    // Then handle phase transition if needed
+    if (CurrentPhase == EGamePhase::SETUP && IsSetupComplete())
     {
-        bIsPlayerTurn = !bIsPlayerTurn;
-        UE_LOG(LogTemp, Display, TEXT("Turn switched to %s"),
-            bIsPlayerTurn ? TEXT("Human Player") : TEXT("AI Player"));
+        // Transition to playing phase
+        SetGamePhase(EGamePhase::PLAYING);
+        UE_LOG(LogTemp, Warning, TEXT("Setup phase complete! Transitioning to PLAYING phase."));
+
+        // REMOVE THIS LINE - Don't override the turn when transitioning phases
+        // bIsPlayerTurn = bPlayerStartsFirst;
     }
+
+    // Log the state after switching
+    UE_LOG(LogTemp, Warning, TEXT("AFTER SWITCH - Current turn: %s, Phase: %s"),
+        bIsPlayerTurn ? TEXT("Human Player") : TEXT("AI Player"),
+        CurrentPhase == EGamePhase::SETUP ? TEXT("SETUP") :
+        CurrentPhase == EGamePhase::PLAYING ? TEXT("PLAYING") : TEXT("GAMEOVER"));
+}
+
+bool USaT_GameInstance::IsSetupComplete() const
+{
+    // Both players need to place 2 units each
+    constexpr int32 UnitsPerPlayer = 2;
+    bool result = (HumanUnitsPlaced >= UnitsPerPlayer && AIUnitsPlaced >= UnitsPerPlayer);
+
+    UE_LOG(LogTemp, Warning, TEXT("IsSetupComplete check: Human units=%d, AI units=%d, Result=%s"),
+        HumanUnitsPlaced, AIUnitsPlaced, result ? TEXT("TRUE") : TEXT("FALSE"));
+
+    return result;
 }
 
 bool USaT_GameInstance::CheckGameOver()

@@ -27,6 +27,9 @@ public:
     UPROPERTY(EditDefaultsOnly, Category = "Units")
     TSubclassOf<class ABrawler> BrawlerClass;
 
+    UPROPERTY()
+    int32 PlacedUnitsCount;
+
 protected:
     // Called when the game starts or when spawned
     virtual void BeginPlay() override;
@@ -39,6 +42,7 @@ public:
     virtual void OnTurn() override;
     virtual void OnWin() override;
     virtual void OnLose() override;
+    void EndTurn();
 
 private:
     // References

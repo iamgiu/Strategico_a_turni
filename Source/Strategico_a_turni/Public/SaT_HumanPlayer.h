@@ -84,12 +84,36 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Unit Selection")
     void ShowUnitSelectionWidget();
 
+    // Track how many units the player has placed
+    UPROPERTY(BlueprintReadWrite, Category = "Game")
+    int32 PlacedUnitsCount;
+
+    // Reference to the EndTurnButton widget
+    UPROPERTY(BlueprintReadWrite, Category = "UI")
+    UUserWidget* EndTurnWidget;
+
+    // Reference to the EndTurnButton widget class
+    UPROPERTY(EditDefaultsOnly, Category = "UI")
+    TSubclassOf<UUserWidget> EndTurnButtonWidgetClass;
+
+    // Function to handle the end turn button click
+    UFUNCTION(BlueprintCallable, Category = "Game")
+    void EndTurn();
+
+    // Function to check if player has placed enough units
+    bool HasPlacedAllUnits() const;
+
+    // Show/hide end turn button
+    void ShowEndTurnButton();
+
+    USaT_GameInstance* GameInstance;
+
 protected:
     virtual void BeginPlay() override;
 
     // Riferimento al GameInstance
-    UPROPERTY()
-    USaT_GameInstance* GameInstance;
+    //UPROPERTY()
+    //USaT_GameInstance* GameInstance;
 
     // Cella selezionata
     int32 SelectedGridX;

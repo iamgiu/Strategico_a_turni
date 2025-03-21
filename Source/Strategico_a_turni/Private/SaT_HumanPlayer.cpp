@@ -47,10 +47,16 @@ ASaT_HumanPlayer::ASaT_HumanPlayer()
         BrawlerClass = DefaultBrawlerClass.Class;
     }
 
-    static ConstructorHelpers::FClassFinder<UUserWidget> DefaultWidgetClass(TEXT("/Game/UI/WBP_UnitSelection"));
-    if (DefaultWidgetClass.Succeeded())
+    static ConstructorHelpers::FClassFinder<UUserWidget> DefaultUnitSelectionClass(TEXT("/Game/UI/WBP_UnitSelection"));
+    if (DefaultUnitSelectionClass.Succeeded())
     {
-        UnitSelectionWidgetClass = DefaultWidgetClass.Class;
+        UnitSelectionWidgetClass = DefaultUnitSelectionClass.Class;
+    }
+
+    static ConstructorHelpers::FClassFinder<UUserWidget> DefaultEndTurnClass(TEXT("/Game/UI/WBP_EndTurn"));
+    if (DefaultEndTurnClass.Succeeded())
+    {
+        EndTurnButtonWidgetClass = DefaultEndTurnClass.Class;
     }
 }
 
@@ -61,7 +67,10 @@ void ASaT_HumanPlayer::BeginPlay()
     // Base initialization
     SelectionState = 0;
     CurrentPhase = EGamePhase::SETUP;
+    PlacedUnitsCount = 0; // Initialize placement count
     UnitsToPlace = 2;
+
+    ShowEndTurnButton();
 
     // Find the GridManager
     TArray<AActor*> FoundGrids;
@@ -90,6 +99,16 @@ void ASaT_HumanPlayer::BeginPlay()
     }
 
     // Validate class references
+
+    if (EndTurnButtonWidgetClass)
+    {
+        UE_LOG(LogTemp, Display, TEXT("EndTurnButtonWidgetClass is properly set"));
+    }
+    else
+    {
+        UE_LOG(LogTemp, Error, TEXT("EndTurnButtonWidgetClass is NOT set! Configure this property in Blueprint"));
+    }
+
     if (UnitSelectionWidgetClass)
     {
         UE_LOG(LogTemp, Display, TEXT("UnitSelectionWidgetClass is properly set"));
@@ -116,6 +135,16 @@ void ASaT_HumanPlayer::BeginPlay()
     {
         UE_LOG(LogTemp, Error, TEXT("BrawlerClass is NOT set! Configure this property in Blueprint"));
     }
+
+    // Get GameInstance to check turn status
+    GameInstance = Cast<USaT_GameInstance>(UGameplayStatics::GetGameInstance(GetWorld()));
+    if (GameInstance)
+    {
+        // Set IsMyTurn based on GameInstance's turn state
+        IsMyTurn = GameInstance->bIsPlayerTurn;
+        UE_LOG(LogTemp, Warning, TEXT("Human Player's turn initialized: %s"),
+            IsMyTurn ? TEXT("TRUE") : TEXT("FALSE"));
+    }
 }
 
 void ASaT_HumanPlayer::Tick(float DeltaTime)
@@ -131,9 +160,172 @@ void ASaT_HumanPlayer::SetupPlayerInputComponent(UInputComponent* PlayerInputCom
 
 void ASaT_HumanPlayer::OnTurn()
 {
-    // Base functionality
-    SelectionState = 0;
+    // Make sure we have a reference to the GameInstance
+    if (!GameInstance)
+    {
+        GameInstance = Cast<USaT_GameInstance>(UGameplayStatics::GetGameInstance(GetWorld()));
+    }
+
+    // Very important - check if it's really our turn
+    if (GameInstance && !GameInstance->bIsPlayerTurn)
+    {
+        UE_LOG(LogTemp, Error, TEXT("Human: OnTurn called but GameInstance says it's AI's turn! Ignoring."));
+        IsMyTurn = false; // Ensure flag is correct
+        return;
+    }
+
+    UE_LOG(LogTemp, Warning, TEXT("Human Player Turn Started - Verification PASSED"));
+
+    // Explicitly set this player's turn flag to true
+    IsMyTurn = true;
+
+    // Explicitly set this player's turn flag to true
+    IsMyTurn = true;
+    UE_LOG(LogTemp, Warning, TEXT("Human: IsMyTurn set to TRUE"));
+
+    // Explicitly set this player's turn flag to true
+    IsMyTurn = true;
+    UE_LOG(LogTemp, Warning, TEXT("Human: IsMyTurn set to TRUE"));
+
+    if (GameInstance)
+    {
+        // Update the class member directly instead of creating a local variable
+        CurrentPhase = GameInstance->GetGamePhase();
+
+        // Log the current phase for debugging
+        UE_LOG(LogTemp, Warning, TEXT("Human Player - Current game phase: %s"),
+            CurrentPhase == EGamePhase::SETUP ? TEXT("SETUP") :
+            CurrentPhase == EGamePhase::PLAYING ? TEXT("PLAYING") : TEXT("GAMEOVER"));
+
+        // Log the number of units placed by each player
+        UE_LOG(LogTemp, Warning, TEXT("Units placed - Human: %d, AI: %d"),
+            GameInstance->HumanUnitsPlaced, GameInstance->AIUnitsPlaced);
+
+        if (CurrentPhase == EGamePhase::SETUP)
+        {
+            // Update our placed units count to match the GameInstance
+            PlacedUnitsCount = GameInstance->HumanUnitsPlaced;
+            UnitsToPlace = 2; // Ensure this is set correctly
+
+            // In setup phase, check if all units are placed
+            if (HasPlacedAllUnits())
+            {
+                UE_LOG(LogTemp, Warning, TEXT("Human player has already placed all units!"));
+                // End turn automatically
+                EndTurn();
+            }
+            else
+            {
+                // Can place more units
+                UE_LOG(LogTemp, Warning, TEXT("Human player can place more units (%d/%d placed)"),
+                    PlacedUnitsCount, UnitsToPlace);
+
+                // Make sure the end turn button is visible
+                ShowEndTurnButton();
+            }
+        }
+        else if (CurrentPhase == EGamePhase::PLAYING)
+        {
+            UE_LOG(LogTemp, Warning, TEXT("Human player turn in PLAYING phase"));
+
+            // Make sure the end turn button is visible for the playing phase
+            ShowEndTurnButton();
+        }
+    }
+    else
+    {
+        UE_LOG(LogTemp, Error, TEXT("GameInstance not found in Human Player OnTurn!"));
+    }
 }
+
+// Implement HasPlacedAllUnits
+bool ASaT_HumanPlayer::HasPlacedAllUnits() const
+{
+    return PlacedUnitsCount >= UnitsToPlace;
+}
+
+void ASaT_HumanPlayer::PlaceUnit(int32 GridX, int32 GridY, bool bIsSniper)
+{
+    // Add detailed logs
+    UE_LOG(LogTemp, Warning, TEXT("PlaceUnit called with coordinates: X=%d, Y=%d"), GridX, GridY);
+
+    // Check class references
+    if (bIsSniper && !SniperClass)
+    {
+        UE_LOG(LogTemp, Error, TEXT("SniperClass is not set! Cannot place Sniper"));
+        return;
+    }
+
+    if (!bIsSniper && !BrawlerClass)
+    {
+        UE_LOG(LogTemp, Error, TEXT("BrawlerClass is not set! Cannot place Brawler"));
+        return;
+    }
+
+    // Check coordinates are within grid
+    if (GridX < 0 || GridX >= 25 || GridY < 0 || GridY >= 25)
+    {
+        UE_LOG(LogTemp, Error, TEXT("Coordinates outside grid!"));
+        return;
+    }
+
+    // Calculate 3D position from grid
+    FVector SpawnLocation;
+    if (GridManager)
+    {
+        SpawnLocation = GridManager->GetWorldLocationFromGrid(GridX, GridY);
+        UE_LOG(LogTemp, Warning, TEXT("Spawn location calculated: X=%f, Y=%f, Z=%f"),
+            SpawnLocation.X, SpawnLocation.Y, SpawnLocation.Z);
+    }
+    else
+    {
+        // Fallback if GridManager is invalid
+        SpawnLocation = FVector(GridX * 100.0f, GridY * 100.0f, 0.0f);
+        UE_LOG(LogTemp, Warning, TEXT("GridManager invalid! Using fallback: X=%f, Y=%f, Z=%f"),
+            SpawnLocation.X, SpawnLocation.Y, SpawnLocation.Z);
+    }
+
+    // Create appropriate unit
+    FActorSpawnParameters SpawnParams;
+    SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+    AUnit* PlacedUnit = nullptr;
+
+    if (bIsSniper)
+    {
+        PlacedUnit = GetWorld()->SpawnActor<ASniper>(SniperClass, SpawnLocation, FRotator::ZeroRotator, SpawnParams);
+        UE_LOG(LogTemp, Display, TEXT("Sniper placed at %d, %d"), GridX, GridY);
+    }
+    else
+    {
+        PlacedUnit = GetWorld()->SpawnActor<ABrawler>(BrawlerClass, SpawnLocation, FRotator::ZeroRotator, SpawnParams);
+        UE_LOG(LogTemp, Display, TEXT("Brawler placed at %d, %d"), GridX, GridY);
+    }
+
+    // Configure unit
+    if (PlacedUnit)
+    {
+        PlacedUnit->GridX = GridX;
+        PlacedUnit->GridY = GridY;
+        PlacedUnit->bIsPlayerUnit = true;
+
+        // Update cell state in GridManager
+        if (GridManager)
+        {
+            GridManager->OccupyCell(GridX, GridY, PlacedUnit);
+        }
+
+        // Increment placement count
+        PlacedUnitsCount++;
+        UE_LOG(LogTemp, Warning, TEXT("Human player has placed %d/%d units"), PlacedUnitsCount, UnitsToPlace);
+
+        // Update the GameInstance to track human units placed
+        if (GameInstance)
+        {
+            GameInstance->HumanUnitsPlaced = PlacedUnitsCount;
+        }
+    }
+}
+
 
 void ASaT_HumanPlayer::OnWin()
 {
@@ -147,7 +339,20 @@ void ASaT_HumanPlayer::OnLose()
 
 void ASaT_HumanPlayer::OnClick()
 {
-    UE_LOG(LogTemp, Display, TEXT("OnClick called"));
+    // Check if it's this player's turn
+    if (!IsMyTurn)
+    {
+        // Add explicit debug info - check game instance too
+        GameInstance = Cast<USaT_GameInstance>(UGameplayStatics::GetGameInstance(GetWorld()));
+        bool gameInstancePlayerTurn = GameInstance ? GameInstance->bIsPlayerTurn : false;
+
+        UE_LOG(LogTemp, Warning, TEXT("Not your turn! Cannot interact with the game. IsMyTurn=%s, GameInstance.bIsPlayerTurn=%s"),
+            IsMyTurn ? TEXT("TRUE") : TEXT("FALSE"),
+            gameInstancePlayerTurn ? TEXT("TRUE") : TEXT("FALSE"));
+        return; // Exit early if it's not the player's turn
+    }
+
+    UE_LOG(LogTemp, Display, TEXT("OnClick called - interaction allowed"));
 
     // Get player controller
     APlayerController* PC = GetWorld()->GetFirstPlayerController();
@@ -292,72 +497,97 @@ void ASaT_HumanPlayer::OnUnitWidgetBrawlerSelected()
     PlaceUnit(SelectedGridX, SelectedGridY, false);
 }
 
-void ASaT_HumanPlayer::PlaceUnit(int32 GridX, int32 GridY, bool bIsSniper)
+void ASaT_HumanPlayer::EndTurn()
 {
-    // Add detailed logs
-    UE_LOG(LogTemp, Warning, TEXT("PlaceUnit called with coordinates: X=%d, Y=%d"), GridX, GridY);
+    UE_LOG(LogTemp, Warning, TEXT("Human Player ending turn"));
 
-    // Check class references
-    if (bIsSniper && !SniperClass)
+    // Get the game instance to pass turn
+    GameInstance = Cast<USaT_GameInstance>(UGameplayStatics::GetGameInstance(GetWorld()));
+    if (!GameInstance)
     {
-        UE_LOG(LogTemp, Error, TEXT("SniperClass is not set! Cannot place Sniper"));
+        UE_LOG(LogTemp, Error, TEXT("Cannot switch turns: GameInstance not found"));
         return;
     }
 
-    if (!bIsSniper && !BrawlerClass)
-    {
-        UE_LOG(LogTemp, Error, TEXT("BrawlerClass is not set! Cannot place Brawler"));
-        return;
-    }
+    // Before switching turn, update GameInstance with our placed units count
+    GameInstance->HumanUnitsPlaced = PlacedUnitsCount;
 
-    // Check coordinates are within grid
-    if (GridX < 0 || GridX >= 25 || GridY < 0 || GridY >= 25)
-    {
-        UE_LOG(LogTemp, Error, TEXT("Coordinates outside grid!"));
-        return;
-    }
+    // Important: Set our own IsMyTurn to false BEFORE calling GameMode->EndTurn()
+    IsMyTurn = false;
+    UE_LOG(LogTemp, Warning, TEXT("Human Player setting IsMyTurn to FALSE"));
 
-    // Calculate 3D position from grid
-    FVector SpawnLocation;
-    if (GridManager)
+    // Get the game mode and tell it to end the turn
+    AGameModeBase* GameModeBase = UGameplayStatics::GetGameMode(GetWorld());
+    ASaT_GameMode* GameMode = Cast<ASaT_GameMode>(GameModeBase);
+    if (GameMode)
     {
-        SpawnLocation = GridManager->GetWorldLocationFromGrid(GridX, GridY);
-        UE_LOG(LogTemp, Warning, TEXT("Spawn location calculated: X=%f, Y=%f, Z=%f"),
-            SpawnLocation.X, SpawnLocation.Y, SpawnLocation.Z);
+        UE_LOG(LogTemp, Warning, TEXT("Human Player calling GameMode->EndTurn()"));
+        GameMode->EndTurn();
     }
     else
     {
-        // Fallback if GridManager is invalid
-        SpawnLocation = FVector(GridX * 100.0f, GridY * 100.0f, 0.0f);
-        UE_LOG(LogTemp, Warning, TEXT("GridManager invalid! Using fallback: X=%f, Y=%f, Z=%f"),
-            SpawnLocation.X, SpawnLocation.Y, SpawnLocation.Z);
+        // Fallback if we can't get GameMode - update directly
+        UE_LOG(LogTemp, Warning, TEXT("GameMode not found, calling GameInstance->SwitchTurn() directly"));
+        GameInstance->SwitchTurn();
+    }
+}
+
+void ASaT_HumanPlayer::ShowEndTurnButton()
+{
+    UE_LOG(LogTemp, Warning, TEXT("ShowEndTurnButton called"));
+
+    // Get player controller
+    APlayerController* PC = GetWorld()->GetFirstPlayerController();
+    if (!PC)
+    {
+        UE_LOG(LogTemp, Error, TEXT("Cannot show End Turn button: Player Controller is NULL"));
+        return;
     }
 
-    // Create appropriate unit
-    FActorSpawnParameters SpawnParams;
-    SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
-    AUnit* PlacedUnit = nullptr;
+    // Check if we have the widget class set
+    if (!EndTurnButtonWidgetClass)
+    {
+        UE_LOG(LogTemp, Error, TEXT("EndTurnButtonWidgetClass is not set! Cannot show End Turn button"));
+        return;
+    }
 
-    if (bIsSniper)
+    // Create EndTurnButton widget if it doesn't exist
+    if (!EndTurnWidget && EndTurnButtonWidgetClass)
     {
-        PlacedUnit = GetWorld()->SpawnActor<ASniper>(SniperClass, SpawnLocation, FRotator::ZeroRotator, SpawnParams);
-        UE_LOG(LogTemp, Display, TEXT("Sniper placed at %d, %d"), GridX, GridY);
-    }
-    else
-    {
-        PlacedUnit = GetWorld()->SpawnActor<ABrawler>(BrawlerClass, SpawnLocation, FRotator::ZeroRotator, SpawnParams);
-        UE_LOG(LogTemp, Display, TEXT("Brawler placed at %d, %d"), GridX, GridY);
-    }
-    // Configure unit
-    if (PlacedUnit)
-    {
-        PlacedUnit->GridX = GridX;
-        PlacedUnit->GridY = GridY;
-        PlacedUnit->bIsPlayerUnit = true;
-        // Update cell state in GridManager
-        if (GridManager)
+        UE_LOG(LogTemp, Warning, TEXT("Creating new End Turn button widget"));
+
+        // Use the class reference instead of trying to find it at runtime
+        EndTurnWidget = CreateWidget<UUserWidget>(PC, EndTurnButtonWidgetClass);
+        if (EndTurnWidget)
         {
-            GridManager->OccupyCell(GridX, GridY, PlacedUnit);
+            EndTurnWidget->AddToViewport();
+            UE_LOG(LogTemp, Warning, TEXT("End Turn widget added to viewport"));
+
+            // Find and bind the button
+            UButton* EndTurnBtn = Cast<UButton>(EndTurnWidget->GetWidgetFromName(TEXT("EndTurnButton")));
+            if (EndTurnBtn)
+            {
+                EndTurnBtn->OnClicked.AddDynamic(this, &ASaT_HumanPlayer::EndTurn);
+                UE_LOG(LogTemp, Display, TEXT("End Turn Button bound successfully"));
+            }
+            else
+            {
+                UE_LOG(LogTemp, Error, TEXT("Failed to find EndTurnButton in widget"));
+            }
         }
+        else
+        {
+            UE_LOG(LogTemp, Error, TEXT("Failed to create End Turn widget"));
+        }
+    }
+    else if (EndTurnWidget && !EndTurnWidget->IsInViewport())
+    {
+        // Make sure it's in the viewport if not already
+        UE_LOG(LogTemp, Warning, TEXT("Adding existing End Turn widget to viewport"));
+        EndTurnWidget->AddToViewport();
+    }
+    else
+    {
+        UE_LOG(LogTemp, Warning, TEXT("End Turn widget already exists and is in viewport"));
     }
 }

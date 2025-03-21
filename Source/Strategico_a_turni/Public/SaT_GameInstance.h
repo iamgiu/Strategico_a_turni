@@ -27,6 +27,16 @@ public:
     UPROPERTY(BlueprintReadWrite, Category = "Game")
     EGamePhase CurrentPhase;
 
+    UFUNCTION(BlueprintCallable, Category = "Game")
+    bool IsSetupComplete() const;
+
+    // Track how many units each player has placed
+    UPROPERTY(BlueprintReadWrite, Category = "Game")
+    int32 HumanUnitsPlaced;
+
+    UPROPERTY(BlueprintReadWrite, Category = "Game")
+    int32 AIUnitsPlaced;
+
     // Lancia la moneta per decidere chi inizia
     UFUNCTION(BlueprintCallable, Category = "Game")
     void TossCoin();

@@ -46,4 +46,7 @@ public:
 protected:
 
 	void InitializePlayers();
+
+	void NotifyCurrentPlayerTurn();
+
 };
