@@ -123,6 +123,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Grid")
 	void ClearPathHighlights();
 
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
+	UStaticMeshComponent* StaticMeshComponent;
+
 	//public:	
 	//	// Called every frame
 	//	virtual void Tick(float DeltaTime) override;

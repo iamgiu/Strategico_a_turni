@@ -468,8 +468,24 @@ void ASaT_GameMode::NotifyCurrentPlayerTurn()
         return;
     }
 
-    // CRITICAL FIX: Always ensure CurrentPlayer matches GameInstance state
+    // Reset movement flags for units of the current player
+    TArray<AActor*> AllUnits;
+    UGameplayStatics::GetAllActorsOfClass(GetWorld(), AUnit::StaticClass(), AllUnits);
+
     bool bIsHumanTurn = GameInstance->bIsPlayerTurn;
+
+    for (AActor* UnitActor : AllUnits)
+    {
+        AUnit* Unit = Cast<AUnit>(UnitActor);
+        if (Unit && Unit->bIsPlayerUnit == bIsHumanTurn)
+        {
+            // Reset movement flag at the start of the player's turn
+            Unit->bHasMovedThisTurn = false;
+            UE_LOG(LogTemp, Warning, TEXT("Reset movement flag for unit: %s"), *Unit->GetName());
+        }
+    }
+
+    // CRITICAL FIX: Always ensure CurrentPlayer matches GameInstance state
     int32 ExpectedPlayerIndex = bIsHumanTurn ? 0 : 1;
 
     // If there's a mismatch, correct it
@@ -498,7 +514,6 @@ void ASaT_GameMode::NotifyCurrentPlayerTurn()
     ISaT_PlayerInterface* PlayerToNotify = Players[CurrentPlayer];
     if (PlayerToNotify)
     {
-
         UE_LOG(LogTemp, Warning, TEXT("Directly notifying player at index %d - IsHuman: %s"),
             CurrentPlayer, bIsHumanTurn ? TEXT("TRUE") : TEXT("FALSE"));
 
@@ -524,7 +539,6 @@ void ASaT_GameMode::NotifyCurrentPlayerTurn()
     }
 
     UpdateGameHUD();
-
 }
 
 void ASaT_GameMode::UpdateGameHUD()

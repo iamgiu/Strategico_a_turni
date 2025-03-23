@@ -77,6 +77,12 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stat")
     int32 Hp;
 
+    UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "Visual")
+    bool bIsSelected;
+
+    UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "Gameplay")
+    bool bHasMovedThisTurn;
+
 protected:
     // Called when the game starts or when spawned
     virtual void BeginPlay() override;

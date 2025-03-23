@@ -585,41 +585,52 @@ void ASaT_HumanPlayer::OnClick()
 
                             if (bIsInMovementRange)
                             {
-                                // Calculate and show the path before actually moving
+                                // First, calculate the path - this needs to happen before any movement
                                 CalculatePath(SelectedUnit->GridX, SelectedUnit->GridY, TargetGridX, TargetGridY);
 
-                                // Move is valid - it's in the highlighted range
-                                UE_LOG(LogTemp, Warning, TEXT("Moving unit from %d,%d to %d,%d"),
-                                    SelectedUnit->GridX, SelectedUnit->GridY, TargetGridX, TargetGridY);
+                                // Check if the unit has already moved this turn
+                                if (SelectedUnit->bHasMovedThisTurn)
+                                {
+                                    UE_LOG(LogTemp, Warning, TEXT("Unit has already moved this turn!"));
+                                    // We don't deselect the unit or clear highlights here
+                                }
+                                else
+                                {
+                                    // Store reference to unit so we don't lose it during operations
+                                    AUnit* UnitToMove = SelectedUnit;
 
-                                // Store reference to unit before nullifying selected unit
-                                AUnit* UnitToMove = SelectedUnit;
+                                    // Clear ONLY the movement range highlights (blue cells)
+                                    // but keep the path highlights intact
+                                    GridManager->ClearAllHighlights();
 
-                                // Deselect unit BEFORE moving
-                                SelectedUnit->UnshowSelected();
-                                SelectedUnit = nullptr;
+                                    // Draw the path more visibly
+                                    GridManager->HighlightPath(CurrentPath, true);
 
-                                // Use the helper method to clear all highlights
-                                ClearAllHighlightsAndPaths();
+                                    // Move is valid - it's in the highlighted range and hasn't moved yet
+                                    UE_LOG(LogTemp, Warning, TEXT("Moving unit from %d,%d to %d,%d"),
+                                        UnitToMove->GridX, UnitToMove->GridY, TargetGridX, TargetGridY);
 
-                                // Update grid state - free old cell
-                                GridManager->OccupyCell(UnitToMove->GridX, UnitToMove->GridY, nullptr);
+                                    // Update grid state - free old cell
+                                    GridManager->OccupyCell(UnitToMove->GridX, UnitToMove->GridY, nullptr);
 
-                                // Move the unit physically
-                                FVector NewLocation = GridManager->GetWorldLocationFromGrid(TargetGridX, TargetGridY);
-                                UnitToMove->GridX = TargetGridX;
-                                UnitToMove->GridY = TargetGridY;
-                                UnitToMove->SetActorLocation(NewLocation);
+                                    // Move the unit physically
+                                    FVector NewLocation = GridManager->GetWorldLocationFromGrid(TargetGridX, TargetGridY);
+                                    UnitToMove->GridX = TargetGridX;
+                                    UnitToMove->GridY = TargetGridY;
+                                    UnitToMove->SetActorLocation(NewLocation);
 
-                                // Occupy new cell
-                                GridManager->OccupyCell(TargetGridX, TargetGridY, UnitToMove);
+                                    // Occupy new cell
+                                    GridManager->OccupyCell(TargetGridX, TargetGridY, UnitToMove);
 
-                                UE_LOG(LogTemp, Warning, TEXT("Unit moved successfully"));
-                            }
-                            else
-                            {
-                                // Move is invalid - not in highlighted movement range
-                                UE_LOG(LogTemp, Warning, TEXT("Invalid move: Target cell not in movement range"));
+                                    // Mark that the unit has moved this turn
+                                    UnitToMove->bHasMovedThisTurn = true;
+
+                                    UE_LOG(LogTemp, Warning, TEXT("Unit moved successfully"));
+
+                                    // IMPORTANT: Don't automatically show the new movement range
+                                    // Let the player decide what to do next - they can deselect the unit
+                                    // if they want to see a new movement range
+                                }
                             }
                         }
                         // Empty cell with no unit selected
@@ -941,29 +952,11 @@ bool ASaT_HumanPlayer::TryMoveUnit(AUnit* Unit, int32 TargetGridX, int32 TargetG
         return false;
     }
 
-    // Check if the target position is within movement range
-    int32 Distance = FMath::Abs(TargetGridX - Unit->GridX) + FMath::Abs(TargetGridY - Unit->GridY);
-
-    if (Distance <= Unit->Movement && !GridManager->IsCellOccupied(TargetGridX, TargetGridY))
+    // Use the Unit's Move method which has the bHasMovedThisTurn check
+    if (Unit->Move(TargetGridX, TargetGridY))
     {
-        // Free the current cell
-        GridManager->OccupyCell(Unit->GridX, Unit->GridY, nullptr);
-
-        // Calculate the new world position
-        FVector NewLocation = GridManager->GetWorldLocationFromGrid(TargetGridX, TargetGridY);
-
-        // Update unit position
-        Unit->GridX = TargetGridX;
-        Unit->GridY = TargetGridY;
-        Unit->SetActorLocation(NewLocation);
-
-        // Mark the new cell as occupied
+        // The move was successful, update the grid
         GridManager->OccupyCell(TargetGridX, TargetGridY, Unit);
-
-        UE_LOG(LogTemp, Display, TEXT("Unit moved to %d, %d"), TargetGridX, TargetGridY);
-
-        // Clear movement highlights
-        // GridManager->ClearHighlights();
 
         return true;
     }

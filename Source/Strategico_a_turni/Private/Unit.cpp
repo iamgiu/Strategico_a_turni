@@ -4,6 +4,7 @@
 #include "Unit.h"
 #include "Kismet/GameplayStatics.h"
 #include "Sat_GameMode.h"
+#include "GridManager.h"
 #include "Engine/World.h"
 
 // Sets default values
@@ -31,6 +32,8 @@ AUnit::AUnit()
 
     // Default team (will be set properly when spawned)
     bIsPlayerUnit = true;
+    bIsSelected = false;
+    bHasMovedThisTurn = false;
 }
 
 // Called when the game starts or when spawned
@@ -66,6 +69,7 @@ void AUnit::ShowSelected()
     {
         UE_LOG(LogTemp, Warning, TEXT("Unit %s: Applying selected material"), *GetName());
         StaticMeshComponent->SetMaterial(0, SelectedMaterial);
+        bIsSelected = true;
     }
     else
     {
@@ -80,6 +84,9 @@ void AUnit::UnshowSelected()
     {
         UE_LOG(LogTemp, Warning, TEXT("Unit %s: Applying base material"), *GetName());
         StaticMeshComponent->SetMaterial(0, BaseMaterial);
+        bIsSelected = false;
+
+        // Don't clear highlights - this should be controlled by the player class
     }
     else
     {
@@ -125,6 +132,13 @@ bool AUnit::IsAlive() const
 
 bool AUnit::Move(int32 NewGridX, int32 NewGridY)
 {
+    // Check if the unit has already moved this turn
+    if (bHasMovedThisTurn)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("Unit %s: Cannot move - already moved this turn"), *GetName());
+        return false;
+    }
+
     // Calculate distance from current position to new position
     int32 Distance = FMath::Abs(NewGridX - GridX) + FMath::Abs(NewGridY - GridY);
 
@@ -141,6 +155,9 @@ bool AUnit::Move(int32 NewGridX, int32 NewGridY)
         float CellSize = 100.0f;
         FVector NewLocation = FVector(NewGridX * CellSize, NewGridY * CellSize, GetActorLocation().Z);
         SetActorLocation(NewLocation);
+
+        // Set flag to indicate this unit has moved this turn
+        bHasMovedThisTurn = true;
 
         return true;
     }
