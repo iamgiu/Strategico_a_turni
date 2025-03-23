@@ -1,5 +1,9 @@
 // Fill out your copyright notice in the Description page of Project Settings.
 
+// Fill out your copyright notice in the Description page of Project Settings.
+
+// Fill out your copyright notice in the Description page of Project Settings.
+
 #include "SaT_RandomPlayer.h"
 #include "Kismet/GameplayStatics.h"
 #include "GridManager.h"
@@ -121,7 +125,6 @@ void ASaT_RandomPlayer::OnTurn()
             FTimerHandle TimerHandle;
             GetWorld()->GetTimerManager().SetTimer(TimerHandle, [this]()
                 {
-                    // CHANGED: Using EndTurn() instead of GameInstance->SwitchTurn()
                     EndTurn();
                 }, 0.5f, false);
             return;
@@ -134,17 +137,28 @@ void ASaT_RandomPlayer::OnTurn()
     }
     else if (CurrentPhase == EGamePhase::PLAYING)
     {
-        // In PLAYING phase, just end turn for now
-        UE_LOG(LogTemp, Warning, TEXT("AI: In PLAYING phase, ending turn..."));
+        // NEW FUNCTIONALITY FOR PLAYING PHASE
+        UE_LOG(LogTemp, Warning, TEXT("AI: In PLAYING phase, starting AI actions..."));
 
-        // For now just end turn after a short delay
-        FTimerHandle TimerHandle;
-        GetWorld()->GetTimerManager().SetTimer(TimerHandle, [this]()
-            {
-                UE_LOG(LogTemp, Warning, TEXT("AI: Ending turn in PLAYING phase"));
-                // CHANGED: Using EndTurn() instead of GameInstance->SwitchTurn()
-                EndTurn();
-            }, 1.0f, false);
+        // Get all AI units
+        AIUnits.Empty();
+        FindAllAIUnits();
+
+        if (AIUnits.Num() > 0)
+        {
+            // Start the sequence of actions for all AI units
+            UE_LOG(LogTemp, Warning, TEXT("AI: Found %d units to control"), AIUnits.Num());
+            CurrentUnitIndex = 0;
+
+            // Schedule the first unit action
+            FTimerHandle TimerHandle;
+            GetWorld()->GetTimerManager().SetTimer(TimerHandle, this, &ASaT_RandomPlayer::ProcessNextAIUnit, 1.0f, false);
+        }
+        else
+        {
+            UE_LOG(LogTemp, Warning, TEXT("AI: No units found, ending turn"));
+            EndTurn();
+        }
     }
 }
 
@@ -174,7 +188,7 @@ void ASaT_RandomPlayer::EndTurn()
     {
         // Fallback if we can't get GameMode
         UE_LOG(LogTemp, Warning, TEXT("GameMode not found, calling GameInstance->SwitchTurn() directly"));
-        GameInstance->SwitchTurn(); // CORRECTED from EndTurn();
+        GameInstance->SwitchTurn();
     }
 }
 
@@ -271,7 +285,7 @@ void ASaT_RandomPlayer::PlaceRandomUnit()
                 }
             }
 
-            // CHANGE HERE - Always end turn after placing one unit
+            // Always end turn after placing one unit
             UE_LOG(LogTemp, Warning, TEXT("AI passing turn after unit placement"));
             EndTurn();
         }
@@ -283,8 +297,8 @@ void ASaT_RandomPlayer::PlaceRandomUnit()
     }
     else if (CurrentPhase == EGamePhase::PLAYING)
     {
-        // PLAYING PHASE LOGIC
-        UE_LOG(LogTemp, Warning, TEXT("AI Turn in PLAYING phase - passing turn"));
+        // PLAYING PHASE LOGIC - This should now be handled in ProcessNextAIUnit
+        UE_LOG(LogTemp, Warning, TEXT("PlaceRandomUnit called in PLAYING phase - this should not happen"));
         EndTurn();
     }
 }
@@ -313,6 +327,322 @@ bool ASaT_RandomPlayer::FindRandomEmptyCell(int32& OutGridX, int32& OutGridY)
     }
 
     return false;
+}
+
+// Find all AI controlled units
+void ASaT_RandomPlayer::FindAllAIUnits()
+{
+    // Get all unit actors in the world
+    TArray<AActor*> AllUnits;
+    UGameplayStatics::GetAllActorsOfClass(GetWorld(), AUnit::StaticClass(), AllUnits);
+
+    // Filter for AI-controlled units
+    for (AActor* UnitActor : AllUnits)
+    {
+        AUnit* Unit = Cast<AUnit>(UnitActor);
+        if (Unit && !Unit->bIsPlayerUnit && Unit->IsAlive())
+        {
+            AIUnits.Add(Unit);
+            UE_LOG(LogTemp, Warning, TEXT("AI: Found unit %s at position (%d,%d)"),
+                *Unit->GetName(), Unit->GridX, Unit->GridY);
+        }
+    }
+}
+
+// Process the next AI unit in sequence
+void ASaT_RandomPlayer::ProcessNextAIUnit()
+{
+    if (!IsMyTurn)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("AI: Not our turn anymore, aborting unit processing"));
+        return;
+    }
+
+    if (CurrentUnitIndex < AIUnits.Num())
+    {
+        AUnit* CurrentUnit = AIUnits[CurrentUnitIndex];
+        UE_LOG(LogTemp, Warning, TEXT("AI: Processing unit %d: %s"),
+            CurrentUnitIndex, *CurrentUnit->GetName());
+
+        // Make moves with the current unit
+        ProcessUnitActions(CurrentUnit);
+
+        // Increment index for next unit and schedule next unit processing
+        CurrentUnitIndex++;
+
+        // Schedule next unit processing with delay
+        FTimerHandle TimerHandle;
+        GetWorld()->GetTimerManager().SetTimer(TimerHandle, this, &ASaT_RandomPlayer::ProcessNextAIUnit, 2.0f, false);
+    }
+    else
+    {
+        // All units processed, end turn
+        UE_LOG(LogTemp, Warning, TEXT("AI: All units processed, ending turn"));
+        EndTurn();
+    }
+}
+
+// Process actions for a specific AI unit
+void ASaT_RandomPlayer::ProcessUnitActions(AUnit* Unit)
+{
+    if (!Unit || !Unit->IsAlive())
+    {
+        UE_LOG(LogTemp, Warning, TEXT("AI: Unit is invalid or dead"));
+        return;
+    }
+
+    // First, try to find and attack a player unit if in range
+    AUnit* PlayerTarget = FindAttackTarget(Unit);
+
+    // If we found a target, attack it
+    if (PlayerTarget)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("AI: Unit %s is attacking player unit at (%d,%d)"),
+            *Unit->GetName(), PlayerTarget->GridX, PlayerTarget->GridY);
+
+        // Visual indication of target
+        if (GridManager)
+        {
+            // Highlight the target for visual feedback
+            GridManager->HighlightCell(PlayerTarget->GridX, PlayerTarget->GridY, true);
+
+            // Schedule to clear the highlight after a delay
+            FTimerHandle ClearTimerHandle;
+            GetWorld()->GetTimerManager().SetTimer(ClearTimerHandle, [this, PlayerTarget]() {
+                if (GridManager && PlayerTarget)
+                {
+                    GridManager->HighlightCell(PlayerTarget->GridX, PlayerTarget->GridY, false);
+                }
+                }, 1.0f, false);
+        }
+
+        // Perform the attack
+        Unit->Attack(PlayerTarget);
+    }
+    // If no valid attack target, try to move toward a player unit
+    else if (!Unit->bHasMovedThisTurn)
+    {
+        MoveTowardPlayerUnit(Unit);
+    }
+}
+
+// Find a player unit to attack if any are in range
+AUnit* ASaT_RandomPlayer::FindAttackTarget(AUnit* AIUnit)
+{
+    if (!AIUnit) return nullptr;
+
+    // Get all player units
+    TArray<AActor*> AllUnits;
+    UGameplayStatics::GetAllActorsOfClass(GetWorld(), AUnit::StaticClass(), AllUnits);
+
+    // Find player units in attack range
+    TArray<AUnit*> PotentialTargets;
+
+    for (AActor* UnitActor : AllUnits)
+    {
+        AUnit* PlayerUnit = Cast<AUnit>(UnitActor);
+        if (PlayerUnit && PlayerUnit->bIsPlayerUnit && PlayerUnit->IsAlive())
+        {
+            // Calculate Manhattan distance
+            int32 Distance = FMath::Abs(PlayerUnit->GridX - AIUnit->GridX) +
+                FMath::Abs(PlayerUnit->GridY - AIUnit->GridY);
+
+            // Check if within attack range
+            if (Distance <= AIUnit->RangeAttack)
+            {
+                PotentialTargets.Add(PlayerUnit);
+                UE_LOG(LogTemp, Warning, TEXT("AI: Found potential target at (%d,%d), distance %d, range %d"),
+                    PlayerUnit->GridX, PlayerUnit->GridY, Distance, AIUnit->RangeAttack);
+            }
+        }
+    }
+
+    // If we have targets, select the weakest one (or random if same HP)
+    if (PotentialTargets.Num() > 0)
+    {
+        // Sort by HP (weakest first)
+        PotentialTargets.Sort([](const AUnit& A, const AUnit& B) {
+            return A.Hp < B.Hp;
+            });
+
+        return PotentialTargets[0];
+    }
+
+    return nullptr;
+}
+
+// Move the AI unit toward the closest player unit
+void ASaT_RandomPlayer::MoveTowardPlayerUnit(AUnit* AIUnit)
+{
+    if (!AIUnit || !GridManager) return;
+
+    // Find closest player unit
+    AUnit* ClosestUnit = FindClosestPlayerUnit(AIUnit);
+
+    if (!ClosestUnit)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("AI: No player units found to move toward"));
+        return;
+    }
+
+    UE_LOG(LogTemp, Warning, TEXT("AI: Moving toward player unit at (%d,%d)"),
+        ClosestUnit->GridX, ClosestUnit->GridY);
+
+    // Calculate direction toward player unit
+    int32 DirX = (ClosestUnit->GridX > AIUnit->GridX) ? 1 :
+        (ClosestUnit->GridX < AIUnit->GridX) ? -1 : 0;
+    int32 DirY = (ClosestUnit->GridY > AIUnit->GridY) ? 1 :
+        (ClosestUnit->GridY < AIUnit->GridY) ? -1 : 0;
+
+    // Create a list of possible moves in priority order (prefer moving on both axes if possible)
+    TArray<FVector2D> PossibleMoves;
+
+    // First, try to move diagonally (moving on both X and Y)
+    if (DirX != 0 && DirY != 0)
+    {
+        // Priority 1: Move along X axis
+        PossibleMoves.Add(FVector2D(AIUnit->GridX + DirX, AIUnit->GridY));
+
+        // Priority 2: Move along Y axis
+        PossibleMoves.Add(FVector2D(AIUnit->GridX, AIUnit->GridY + DirY));
+    }
+    // If target is directly horizontal
+    else if (DirX != 0)
+    {
+        PossibleMoves.Add(FVector2D(AIUnit->GridX + DirX, AIUnit->GridY));
+        // Add some randomness to Y movement if X is the main direction
+        PossibleMoves.Add(FVector2D(AIUnit->GridX + DirX, AIUnit->GridY + 1));
+        PossibleMoves.Add(FVector2D(AIUnit->GridX + DirX, AIUnit->GridY - 1));
+    }
+    // If target is directly vertical
+    else if (DirY != 0)
+    {
+        PossibleMoves.Add(FVector2D(AIUnit->GridX, AIUnit->GridY + DirY));
+        // Add some randomness to X movement if Y is the main direction
+        PossibleMoves.Add(FVector2D(AIUnit->GridX + 1, AIUnit->GridY + DirY));
+        PossibleMoves.Add(FVector2D(AIUnit->GridX - 1, AIUnit->GridY + DirY));
+    }
+
+    // Try each possible move until we find a valid one
+    for (const FVector2D& Move : PossibleMoves)
+    {
+        int32 NewX = FMath::Clamp(Move.X, 0, 24);  // Clamp to grid boundaries
+        int32 NewY = FMath::Clamp(Move.Y, 0, 24);
+
+        // Calculate distance from current position
+        int32 MoveDistance = FMath::Abs(NewX - AIUnit->GridX) + FMath::Abs(NewY - AIUnit->GridY);
+
+        // Check if move is valid (within movement range and not occupied)
+        if (MoveDistance <= AIUnit->Movement && !GridManager->IsCellOccupied(NewX, NewY))
+        {
+            // Visual feedback - highlight path
+            if (GridManager)
+            {
+                TArray<FVector2D> Path;
+                Path.Add(FVector2D(AIUnit->GridX, AIUnit->GridY));
+                Path.Add(FVector2D(NewX, NewY));
+                GridManager->HighlightPath(Path, true);
+
+                // Schedule to clear the path highlight
+                FTimerHandle ClearPathHandle;
+                GetWorld()->GetTimerManager().SetTimer(ClearPathHandle, [this]() {
+                    if (GridManager)
+                    {
+                        GridManager->ClearPathHighlights();
+                    }
+                    }, 1.0f, false);
+            }
+
+            // Move the unit
+            UE_LOG(LogTemp, Warning, TEXT("AI: Moving unit from (%d,%d) to (%d,%d)"),
+                AIUnit->GridX, AIUnit->GridY, NewX, NewY);
+
+            // Update the grid manager about the move
+            if (GridManager)
+            {
+                // Mark old cell as unoccupied
+                // Note: You might need to add a method to GridManager to handle this
+                // For now, we'll just mark the new cell as occupied
+
+                // Execute the move
+                bool bSuccess = AIUnit->Move(NewX, NewY);
+
+                if (bSuccess)
+                {
+                    // Mark new cell as occupied
+                    GridManager->OccupyCell(NewX, NewY, AIUnit);
+                    UE_LOG(LogTemp, Warning, TEXT("AI: Successfully moved unit"));
+
+                    // After moving, check if we can now attack
+                    AUnit* NewTarget = FindAttackTarget(AIUnit);
+                    if (NewTarget)
+                    {
+                        UE_LOG(LogTemp, Warning, TEXT("AI: After moving, now attacking player unit at (%d,%d)"),
+                            NewTarget->GridX, NewTarget->GridY);
+
+                        // Visual indication of target
+                        if (GridManager)
+                        {
+                            GridManager->HighlightCell(NewTarget->GridX, NewTarget->GridY, true);
+
+                            // Schedule to clear the highlight
+                            FTimerHandle ClearHighlightHandle;
+                            GetWorld()->GetTimerManager().SetTimer(ClearHighlightHandle, [this, NewTarget]() {
+                                if (GridManager && NewTarget)
+                                {
+                                    GridManager->HighlightCell(NewTarget->GridX, NewTarget->GridY, false);
+                                }
+                                }, 1.0f, false);
+                        }
+
+                        // Perform the attack
+                        AIUnit->Attack(NewTarget);
+                    }
+                }
+                else
+                {
+                    UE_LOG(LogTemp, Warning, TEXT("AI: Failed to move unit"));
+                }
+            }
+
+            // We found and executed a valid move, so exit
+            return;
+        }
+    }
+
+    UE_LOG(LogTemp, Warning, TEXT("AI: Could not find a valid move for unit"));
+}
+
+// Find the closest player unit to the given AI unit
+AUnit* ASaT_RandomPlayer::FindClosestPlayerUnit(AUnit* AIUnit)
+{
+    if (!AIUnit) return nullptr;
+
+    AUnit* ClosestUnit = nullptr;
+    int32 ClosestDistance = INT_MAX;
+
+    // Get all units
+    TArray<AActor*> AllUnits;
+    UGameplayStatics::GetAllActorsOfClass(GetWorld(), AUnit::StaticClass(), AllUnits);
+
+    for (AActor* UnitActor : AllUnits)
+    {
+        AUnit* PlayerUnit = Cast<AUnit>(UnitActor);
+        if (PlayerUnit && PlayerUnit->bIsPlayerUnit && PlayerUnit->IsAlive())
+        {
+            // Calculate Manhattan distance
+            int32 Distance = FMath::Abs(PlayerUnit->GridX - AIUnit->GridX) +
+                FMath::Abs(PlayerUnit->GridY - AIUnit->GridY);
+
+            if (Distance < ClosestDistance)
+            {
+                ClosestDistance = Distance;
+                ClosestUnit = PlayerUnit;
+            }
+        }
+    }
+
+    return ClosestUnit;
 }
 
 void ASaT_RandomPlayer::OnWin()

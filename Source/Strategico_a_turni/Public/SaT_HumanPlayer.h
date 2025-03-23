@@ -123,6 +123,45 @@ public:
 
     void ClearAllHighlightsAndPaths();
 
+    // Reference to the Movement and Attack widget class
+    UPROPERTY(EditDefaultsOnly, Category = "UI")
+    TSubclassOf<UUserWidget> MovementAndAttackWidgetClass;
+
+    // Reference to the Movement and Attack widget instance
+    UPROPERTY()
+    UUserWidget* MovementAndAttackWidget;
+
+    // Function to show the Movement and Attack widget
+    UFUNCTION(BlueprintCallable, Category = "UI")
+    void ShowMovementAndAttackWidget(AUnit* UnitToShow);
+
+    // Functions to handle button clicks from the widget
+    UFUNCTION(BlueprintCallable, Category = "UI")
+    void OnMoveButtonClicked();
+
+    UFUNCTION(BlueprintCallable, Category = "UI")
+    void OnAttackButtonClicked();
+
+    // Selection mode tracking
+    UPROPERTY()
+    bool bMoveMode;
+
+    UPROPERTY()
+    bool bAttackMode;
+
+    UPROPERTY()
+    TMap<AUnit*, bool> UnitAttackedThisTurn;
+
+    UFUNCTION()
+    void ShowAttackRange(AUnit* Unit);
+
+    // Try to attack an enemy unit
+    UFUNCTION()
+    bool TryAttackUnit(AUnit* AttackingUnit, AUnit* TargetUnit);
+
+    // Find unit at a specific grid position
+    UFUNCTION()
+    AUnit* FindUnitAtPosition(int32 GridX, int32 GridY);
 
 protected:
     virtual void BeginPlay() override;
@@ -157,4 +196,10 @@ protected:
 
     UPROPERTY()
     TArray<FVector2D> CurrentPath;
+
+    bool bHasPlacedSniper;
+    bool bHasPlacedBrawler;
+
+    UPROPERTY(BlueprintReadOnly, Category = "Gameplay")
+    bool IsMyTurn;
 };

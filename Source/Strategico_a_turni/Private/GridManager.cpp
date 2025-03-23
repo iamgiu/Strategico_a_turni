@@ -20,6 +20,24 @@ AGridManager::AGridManager()
 	// tile padding percentage 
 	CellPadding = 0.01f;
 
+	static ConstructorHelpers::FObjectFinder<UMaterial> DefaultMatAsset(TEXT("/Game/Materials/M_BaseMaterial"));
+	if (DefaultMatAsset.Succeeded())
+	{
+		DefaultTileMaterial = DefaultMatAsset.Object;
+	}
+
+	static ConstructorHelpers::FObjectFinder<UMaterial> HighlightMatAsset(TEXT("/Game/Materials/M_TileSelected"));
+	if (HighlightMatAsset.Succeeded())
+	{
+		HighlightMaterial = HighlightMatAsset.Object;
+	}
+
+	static ConstructorHelpers::FObjectFinder<UMaterial> PathMatAsset(TEXT("/Game/Materials/M_Path"));
+	if (PathMatAsset.Succeeded())
+	{
+		PathMaterial = PathMatAsset.Object;
+	}
+
 }
 
 void AGridManager::OnConstruction(const FTransform& Transform)

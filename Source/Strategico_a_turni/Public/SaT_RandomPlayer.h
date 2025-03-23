@@ -56,4 +56,18 @@ private:
     void PlaceRandomUnit();
     bool FindRandomEmptyCell(int32& OutGridX, int32& OutGridY);
 
+    // New methods for PLAYING phase AI
+    void FindAllAIUnits();
+    void ProcessNextAIUnit();
+    void ProcessUnitActions(AUnit* Unit);
+    AUnit* FindAttackTarget(AUnit* AIUnit);
+    void MoveTowardPlayerUnit(AUnit* AIUnit);
+    AUnit* FindClosestPlayerUnit(AUnit* AIUnit);
+
+    // Track AI units
+    UPROPERTY()
+    TArray<AUnit*> AIUnits;
+
+    // Current unit index for processing
+    int32 CurrentUnitIndex;
 };
