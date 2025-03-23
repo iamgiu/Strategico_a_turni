@@ -82,7 +82,13 @@ void AGridManager::GenerateField()
 			const float TileScale = TileSize / 100.0f;
 			const float Zscaling = 0.01f;
 			Obj->SetActorScale3D(FVector(TileScale, TileScale, Zscaling));
+
+			// This is the critical part - setting the grid position
 			Obj->SetGridPosition(IndexX, IndexY);
+			// You should also be setting the GridX and GridY properties directly
+			Obj->GridX = IndexX;
+			Obj->GridY = IndexY;
+
 			TileArray.Add(Obj);
 			TileMap.Add(FVector2D(IndexX, IndexY), Obj);
 		}

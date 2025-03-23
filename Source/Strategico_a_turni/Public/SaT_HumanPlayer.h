@@ -14,6 +14,7 @@
 // Forward declarations
 class AGridManager;
 class AUnit;
+class ATile;
 
 UCLASS()
 class STRATEGICO_A_TURNI_API ASaT_HumanPlayer : public APawn, public ISaT_PlayerInterface
@@ -162,6 +163,9 @@ public:
     // Find unit at a specific grid position
     UFUNCTION()
     AUnit* FindUnitAtPosition(int32 GridX, int32 GridY);
+
+    // Helper method to handle clicks during the playing phase
+    void HandlePlayingPhaseClick(ATile* ClickedTile);
 
 protected:
     virtual void BeginPlay() override;

@@ -401,8 +401,255 @@ void ASaT_HumanPlayer::PlaceUnit(int32 GridX, int32 GridY, bool bIsSniper)
     }
 }
 
-
 void ASaT_HumanPlayer::OnClick()
+{
+    // Check if it's this player's turn
+    if (!IsMyTurn)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("Not your turn! Cannot interact with the game."));
+        return;
+    }
+
+    // Get current game phase
+    if (GameInstance)
+    {
+        CurrentPhase = GameInstance->GetGamePhase();
+    }
+
+    // Get player controller
+    APlayerController* PC = GetWorld()->GetFirstPlayerController();
+    if (!PC)
+    {
+        UE_LOG(LogTemp, Error, TEXT("Failed to get PlayerController in OnClick"));
+        return;
+    }
+
+    // Use reliable hit detection
+    FHitResult HitResult;
+    bool bHitSuccess = PC->GetHitResultUnderCursor(ECC_Visibility, true, HitResult);
+
+    if (bHitSuccess)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("Hit detected at world location: %s"), *HitResult.Location.ToString());
+
+        // Find the clicked tile or closest tile
+        ATile* ClickedTile = nullptr;
+
+        // First try to get the directly hit tile
+        ClickedTile = Cast<ATile>(HitResult.GetActor());
+
+        // If no direct hit, find the closest tile
+        if (!ClickedTile && GridManager)
+        {
+            float ClosestDistance = FLT_MAX;
+            for (auto& TilePair : GridManager->TileMap)
+            {
+                ATile* Tile = TilePair.Value;
+                if (Tile)
+                {
+                    float DistSq = FVector::DistSquared(Tile->GetActorLocation(), HitResult.Location);
+                    if (DistSq < ClosestDistance)
+                    {
+                        ClosestDistance = DistSq;
+                        ClickedTile = Tile;
+                    }
+                }
+            }
+        }
+
+        // Process the clicked tile if found
+        if (ClickedTile)
+        {
+            // === SETUP PHASE HANDLING ===
+            if (CurrentPhase == EGamePhase::SETUP)
+            {
+                UE_LOG(LogTemp, Warning, TEXT("Setup phase: Selected tile at position: %d, %d"),
+                    ClickedTile->GridX, ClickedTile->GridY);
+
+                // Check if the tile is already occupied
+                if (ClickedTile->bIsOccupied)
+                {
+                    UE_LOG(LogTemp, Warning, TEXT("Tile is already occupied!"));
+                    return;
+                }
+
+                // Store selected tile coordinates
+                SelectedGridX = ClickedTile->GridX;
+                SelectedGridY = ClickedTile->GridY;
+
+                // Show unit selection widget
+                ShowUnitSelectionWidget();
+            }
+            // === PLAYING PHASE HANDLING ===
+            else if (CurrentPhase == EGamePhase::PLAYING)
+            {
+                // Playing phase logic - handle unit or tile selection
+                HandlePlayingPhaseClick(ClickedTile);
+            }
+        }
+        else
+        {
+            UE_LOG(LogTemp, Warning, TEXT("Could not find a valid tile at click location"));
+        }
+    }
+    else
+    {
+        UE_LOG(LogTemp, Warning, TEXT("No hit result under cursor"));
+    }
+}
+
+void ASaT_HumanPlayer::HandlePlayingPhaseClick(ATile* ClickedTile)
+{
+    if (!ClickedTile)
+        return;
+
+    UE_LOG(LogTemp, Warning, TEXT("Click detected in PLAYING phase on tile %d,%d"),
+        ClickedTile->GridX, ClickedTile->GridY);
+
+    // Check if there's a unit on this tile
+    AUnit* ClickedUnit = ClickedTile->OccupyingUnit;
+
+    // If we found a unit on the tile
+    if (ClickedUnit)
+    {
+        // If we hit a player unit
+        if (ClickedUnit->bIsPlayerUnit)
+        {
+            // If we have a unit selected and in attack mode, clicking another friendly unit cancels attack
+            if (bAttackMode && SelectedUnit)
+            {
+                // Cancel attack mode and reset
+                bAttackMode = false;
+                ClearAllHighlightsAndPaths();
+            }
+
+            // If we click on the already selected unit, show action widget
+            if (SelectedUnit == ClickedUnit)
+            {
+                UE_LOG(LogTemp, Warning, TEXT("Showing action widget for unit at %d,%d"),
+                    ClickedUnit->GridX, ClickedUnit->GridY);
+                ShowMovementAndAttackWidget(ClickedUnit);
+            }
+            // Otherwise select the new unit
+            else
+            {
+                // Deselect previous unit if any
+                if (SelectedUnit)
+                {
+                    SelectedUnit->UnshowSelected();
+                    ClearAllHighlightsAndPaths();
+                }
+
+                // Select new unit
+                SelectedUnit = ClickedUnit;
+                SelectedUnit->ShowSelected();
+                UE_LOG(LogTemp, Warning, TEXT("Selected unit at %d,%d"),
+                    SelectedUnit->GridX, SelectedUnit->GridY);
+
+                // Show the action widget
+                ShowMovementAndAttackWidget(SelectedUnit);
+            }
+        }
+        // If we hit an enemy unit
+        else
+        {
+            // If we're in attack mode and have a unit selected, try to attack
+            if (bAttackMode && SelectedUnit)
+            {
+                UE_LOG(LogTemp, Warning, TEXT("Trying to attack enemy at %d,%d"),
+                    ClickedUnit->GridX, ClickedUnit->GridY);
+
+                bool bAttackSuccess = TryAttackUnit(SelectedUnit, ClickedUnit);
+                if (bAttackSuccess)
+                {
+                    UE_LOG(LogTemp, Warning, TEXT("Attack successful!"));
+
+                    // Reset attack mode
+                    bAttackMode = false;
+                    ClearAllHighlightsAndPaths();
+                }
+                else
+                {
+                    UE_LOG(LogTemp, Warning, TEXT("Attack failed!"));
+                }
+            }
+            else
+            {
+                UE_LOG(LogTemp, Warning, TEXT("Clicked on enemy unit but not in attack mode or no unit selected"));
+            }
+        }
+    }
+    // If the tile is empty
+    else
+    {
+        // Handle empty tile click (movement logic)
+        if (bMoveMode && SelectedUnit)
+        {
+            // Check if this cell is in movement range (highlighted)
+            bool bIsInMovementRange = GridManager->HighlightedTiles.Contains(ClickedTile);
+
+            if (bIsInMovementRange)
+            {
+                // Check if unit has already moved
+                if (SelectedUnit->bHasMovedThisTurn)
+                {
+                    UE_LOG(LogTemp, Warning, TEXT("Unit has already moved this turn!"));
+                }
+                else
+                {
+                    // Calculate path
+                    CalculatePath(SelectedUnit->GridX, SelectedUnit->GridY, ClickedTile->GridX, ClickedTile->GridY);
+
+                    // Store unit reference
+                    AUnit* UnitToMove = SelectedUnit;
+
+                    // Clear highlights but keep path
+                    GridManager->ClearAllHighlights();
+                    GridManager->HighlightPath(CurrentPath, true);
+
+                    // Move the unit
+                    UE_LOG(LogTemp, Warning, TEXT("Moving unit from %d,%d to %d,%d"),
+                        UnitToMove->GridX, UnitToMove->GridY, ClickedTile->GridX, ClickedTile->GridY);
+
+                    // Update grid - free old cell
+                    GridManager->OccupyCell(UnitToMove->GridX, UnitToMove->GridY, nullptr);
+
+                    // Update unit position
+                    FVector NewLocation = GridManager->GetWorldLocationFromGrid(ClickedTile->GridX, ClickedTile->GridY);
+                    UnitToMove->GridX = ClickedTile->GridX;
+                    UnitToMove->GridY = ClickedTile->GridY;
+                    UnitToMove->SetActorLocation(NewLocation);
+
+                    // Occupy new cell
+                    GridManager->OccupyCell(ClickedTile->GridX, ClickedTile->GridY, UnitToMove);
+
+                    // Mark as moved
+                    UnitToMove->bHasMovedThisTurn = true;
+
+                    UE_LOG(LogTemp, Warning, TEXT("Move successful!"));
+
+                    // Reset move mode
+                    bMoveMode = false;
+                    ClearAllHighlightsAndPaths();
+
+                    // Show action widget again to allow attack after move
+                    ShowMovementAndAttackWidget(UnitToMove);
+                }
+            }
+            else
+            {
+                UE_LOG(LogTemp, Warning, TEXT("Target cell is not in movement range"));
+            }
+        }
+        else
+        {
+            UE_LOG(LogTemp, Warning, TEXT("Clicked on empty cell but not in move mode or no unit selected"));
+        }
+    }
+}
+
+
+/*void ASaT_HumanPlayer::OnClick()
 {
     // Check if it's this player's turn
     if (!IsMyTurn)
@@ -710,7 +957,7 @@ void ASaT_HumanPlayer::OnClick()
     {
         UE_LOG(LogTemp, Warning, TEXT("No hit result under cursor"));
     }
-}
+}*/
 
 void ASaT_HumanPlayer::ShowUnitSelectionWidget()
 {
