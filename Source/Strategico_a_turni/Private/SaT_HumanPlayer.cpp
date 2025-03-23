@@ -36,6 +36,8 @@ ASaT_HumanPlayer::ASaT_HumanPlayer()
     float CameraHeight = 2000.0f;
     Camera->SetRelativeLocation(FVector(GridSize / 2, GridSize / 2, CameraHeight));
 
+       UnitSelectionWidget = nullptr;
+
     // Adding hard-coded defaults for classes - these will be overridden by BP values if set
     static ConstructorHelpers::FClassFinder<ASniper> DefaultSniperClass(TEXT("/Game/Blueprints/BP_Sniper"));
     if (DefaultSniperClass.Succeeded())
@@ -208,6 +210,22 @@ void ASaT_HumanPlayer::OnTurn()
         UE_LOG(LogTemp, Error, TEXT("Human: OnTurn called but GameInstance says it's AI's turn! Ignoring."));
         IsMyTurn = false; // Ensure flag is correct
         return;
+    }
+
+    if (UnitSelectionWidget)
+    {
+        UnitSelectionWidget->RemoveFromParent();
+        UnitSelectionWidget = nullptr;
+    }
+
+    // Reset input mode at start of turn
+    APlayerController* PC = GetWorld()->GetFirstPlayerController();
+    if (PC)
+    {
+        // Use GameAndUI consistently here too
+        FInputModeGameAndUI InputMode;
+        PC->SetInputMode(InputMode);
+        PC->bShowMouseCursor = true;
     }
 
     UE_LOG(LogTemp, Warning, TEXT("Human Player Turn Started - Verification PASSED"));
@@ -648,317 +666,6 @@ void ASaT_HumanPlayer::HandlePlayingPhaseClick(ATile* ClickedTile)
     }
 }
 
-
-/*void ASaT_HumanPlayer::OnClick()
-{
-    // Check if it's this player's turn
-    if (!IsMyTurn)
-    {
-        UE_LOG(LogTemp, Warning, TEXT("Not your turn! Cannot interact with the game."));
-        return;
-    }
-
-    // Get current game phase
-    if (GameInstance)
-    {
-        CurrentPhase = GameInstance->GetGamePhase();
-    }
-
-    // Get player controller
-    APlayerController* PC = GetWorld()->GetFirstPlayerController();
-    if (!PC)
-    {
-        UE_LOG(LogTemp, Error, TEXT("Failed to get PlayerController in OnClick"));
-        return;
-    }
-
-    // Use reliable hit detection
-    FHitResult HitResult;
-    bool bHitSuccess = PC->GetHitResultUnderCursor(ECC_Visibility, true, HitResult);
-
-    if (bHitSuccess)
-    {
-        UE_LOG(LogTemp, Warning, TEXT("Hit detected at world location: %s"), *HitResult.Location.ToString());
-
-        // === SETUP PHASE HANDLING ===
-        if (CurrentPhase == EGamePhase::SETUP)
-        {
-            // Get grid coordinates from hit location
-            FVector2D GridPosition = GridManager->GetXYPositionByRelativeLocation(HitResult.Location);
-            SelectedGridX = FMath::FloorToInt(GridPosition.X);
-            SelectedGridY = FMath::FloorToInt(GridPosition.Y);
-
-            UE_LOG(LogTemp, Warning, TEXT("Setup phase: Selected grid position: %d, %d"), SelectedGridX, SelectedGridY);
-
-            // Make sure position is in grid bounds
-            if (SelectedGridX >= 0 && SelectedGridX < 25 && SelectedGridY >= 0 && SelectedGridY < 25)
-            {
-                // Check if the cell is already occupied
-                if (GridManager->IsCellOccupied(SelectedGridX, SelectedGridY))
-                {
-                    UE_LOG(LogTemp, Warning, TEXT("Cell is already occupied!"));
-                    return;
-                }
-
-                // Show unit selection widget at this position
-                ShowUnitSelectionWidget();
-            }
-            else
-            {
-                UE_LOG(LogTemp, Warning, TEXT("Clicked outside grid bounds"));
-            }
-        }
-        // === PLAYING PHASE HANDLING ===
-        else if (CurrentPhase == EGamePhase::PLAYING)
-        {
-            UE_LOG(LogTemp, Warning, TEXT("Click detected in PLAYING phase"));
-
-            // Get the clicked actor and convert to unit if possible
-            AUnit* ClickedUnit = Cast<AUnit>(HitResult.GetActor());
-
-            // If we directly hit a unit
-            if (ClickedUnit)
-            {
-                // If we hit a player unit
-                if (ClickedUnit->bIsPlayerUnit)
-                {
-                    // If we have a unit selected and in attack mode, clicking another friendly unit cancels attack
-                    if (bAttackMode && SelectedUnit)
-                    {
-                        // Cancel attack mode and reset
-                        bAttackMode = false;
-                        ClearAllHighlightsAndPaths();
-                    }
-
-                    // If we click on the already selected unit, show action widget
-                    if (SelectedUnit == ClickedUnit)
-                    {
-                        UE_LOG(LogTemp, Warning, TEXT("Showing action widget for unit at %d,%d"),
-                            ClickedUnit->GridX, ClickedUnit->GridY);
-                        ShowMovementAndAttackWidget(ClickedUnit);
-                    }
-                    // Otherwise select the new unit
-                    else
-                    {
-                        // Deselect previous unit if any
-                        if (SelectedUnit)
-                        {
-                            SelectedUnit->UnshowSelected();
-                            ClearAllHighlightsAndPaths();
-                        }
-
-                        // Select new unit
-                        SelectedUnit = ClickedUnit;
-                        SelectedUnit->ShowSelected();
-                        UE_LOG(LogTemp, Warning, TEXT("Selected unit at %d,%d"),
-                            SelectedUnit->GridX, SelectedUnit->GridY);
-
-                        // Show the action widget
-                        ShowMovementAndAttackWidget(SelectedUnit);
-                    }
-                }
-                // If we hit an enemy unit
-                else
-                {
-                    // If we're in attack mode and have a unit selected, try to attack
-                    if (bAttackMode && SelectedUnit)
-                    {
-                        UE_LOG(LogTemp, Warning, TEXT("Trying to attack enemy at %d,%d"),
-                            ClickedUnit->GridX, ClickedUnit->GridY);
-
-                        bool bAttackSuccess = TryAttackUnit(SelectedUnit, ClickedUnit);
-                        if (bAttackSuccess)
-                        {
-                            UE_LOG(LogTemp, Warning, TEXT("Attack successful!"));
-
-                            // Reset attack mode
-                            bAttackMode = false;
-                            ClearAllHighlightsAndPaths();
-                        }
-                        else
-                        {
-                            UE_LOG(LogTemp, Warning, TEXT("Attack failed!"));
-                        }
-                    }
-                    else
-                    {
-                        UE_LOG(LogTemp, Warning, TEXT("Clicked on enemy unit but not in attack mode or no unit selected"));
-                    }
-                }
-            }
-            // If we hit the grid instead of a unit
-            else if (GridManager)
-            {
-                // Get grid coordinates from hit location
-                FVector2D GridPosition = GridManager->GetXYPositionByRelativeLocation(HitResult.Location);
-                int32 TargetGridX = FMath::FloorToInt(GridPosition.X);
-                int32 TargetGridY = FMath::FloorToInt(GridPosition.Y);
-
-                UE_LOG(LogTemp, Warning, TEXT("Hit grid position: %d, %d"), TargetGridX, TargetGridY);
-
-                // Make sure position is in grid bounds
-                if (TargetGridX >= 0 && TargetGridX < 25 && TargetGridY >= 0 && TargetGridY < 25)
-                {
-                    // Check if there's a unit at this position (might be one that wasn't directly hit)
-                    AUnit* UnitAtPosition = FindUnitAtPosition(TargetGridX, TargetGridY);
-
-                    if (UnitAtPosition)
-                    {
-                        // If it's a friendly unit
-                        if (UnitAtPosition->bIsPlayerUnit)
-                        {
-                            // If we have a unit selected and in attack mode, clicking another friendly unit cancels attack
-                            if (bAttackMode && SelectedUnit)
-                            {
-                                // Cancel attack mode and reset
-                                bAttackMode = false;
-                                ClearAllHighlightsAndPaths();
-                            }
-
-                            // If we click on the already selected unit, show action widget
-                            if (SelectedUnit == UnitAtPosition)
-                            {
-                                UE_LOG(LogTemp, Warning, TEXT("Showing action widget for unit at %d,%d"),
-                                    UnitAtPosition->GridX, UnitAtPosition->GridY);
-                                ShowMovementAndAttackWidget(UnitAtPosition);
-                            }
-                            // Otherwise select the new unit
-                            else
-                            {
-                                // Deselect previous unit if any
-                                if (SelectedUnit)
-                                {
-                                    SelectedUnit->UnshowSelected();
-                                    ClearAllHighlightsAndPaths();
-                                }
-
-                                // Select new unit
-                                SelectedUnit = UnitAtPosition;
-                                SelectedUnit->ShowSelected();
-                                UE_LOG(LogTemp, Warning, TEXT("Selected unit at %d,%d"),
-                                    SelectedUnit->GridX, SelectedUnit->GridY);
-
-                                // Show the action widget
-                                ShowMovementAndAttackWidget(SelectedUnit);
-                            }
-                        }
-                        // If we hit an enemy unit
-                        else
-                        {
-                            // If we're in attack mode and have a unit selected, try to attack
-                            if (bAttackMode && SelectedUnit)
-                            {
-                                UE_LOG(LogTemp, Warning, TEXT("Trying to attack enemy at %d,%d"),
-                                    UnitAtPosition->GridX, UnitAtPosition->GridY);
-
-                                bool bAttackSuccess = TryAttackUnit(SelectedUnit, UnitAtPosition);
-                                if (bAttackSuccess)
-                                {
-                                    UE_LOG(LogTemp, Warning, TEXT("Attack successful!"));
-
-                                    // Reset attack mode
-                                    bAttackMode = false;
-                                    ClearAllHighlightsAndPaths();
-                                }
-                                else
-                                {
-                                    UE_LOG(LogTemp, Warning, TEXT("Attack failed!"));
-                                }
-                            }
-                            else
-                            {
-                                UE_LOG(LogTemp, Warning, TEXT("Clicked on enemy unit but not in attack mode or no unit selected"));
-                            }
-                        }
-                    }
-                    // If we click on an empty cell
-                    else
-                    {
-                        // If in move mode and we have a unit selected
-                        if (bMoveMode && SelectedUnit)
-                        {
-                            // Check if this cell is in movement range (highlighted)
-                            bool bIsInMovementRange = false;
-                            ATile* TargetTile = nullptr;
-
-                            if (GridManager->TileMap.Contains(FVector2D(TargetGridX, TargetGridY)))
-                            {
-                                TargetTile = GridManager->TileMap[FVector2D(TargetGridX, TargetGridY)];
-                                bIsInMovementRange = GridManager->HighlightedTiles.Contains(TargetTile);
-                            }
-
-                            if (bIsInMovementRange)
-                            {
-                                // Check if unit has already moved
-                                if (SelectedUnit->bHasMovedThisTurn)
-                                {
-                                    UE_LOG(LogTemp, Warning, TEXT("Unit has already moved this turn!"));
-                                }
-                                else
-                                {
-                                    // Calculate path
-                                    CalculatePath(SelectedUnit->GridX, SelectedUnit->GridY, TargetGridX, TargetGridY);
-
-                                    // Store unit reference
-                                    AUnit* UnitToMove = SelectedUnit;
-
-                                    // Clear highlights but keep path
-                                    GridManager->ClearAllHighlights();
-                                    GridManager->HighlightPath(CurrentPath, true);
-
-                                    // Move the unit
-                                    UE_LOG(LogTemp, Warning, TEXT("Moving unit from %d,%d to %d,%d"),
-                                        UnitToMove->GridX, UnitToMove->GridY, TargetGridX, TargetGridY);
-
-                                    // Update grid - free old cell
-                                    GridManager->OccupyCell(UnitToMove->GridX, UnitToMove->GridY, nullptr);
-
-                                    // Update unit position
-                                    FVector NewLocation = GridManager->GetWorldLocationFromGrid(TargetGridX, TargetGridY);
-                                    UnitToMove->GridX = TargetGridX;
-                                    UnitToMove->GridY = TargetGridY;
-                                    UnitToMove->SetActorLocation(NewLocation);
-
-                                    // Occupy new cell
-                                    GridManager->OccupyCell(TargetGridX, TargetGridY, UnitToMove);
-
-                                    // Mark as moved
-                                    UnitToMove->bHasMovedThisTurn = true;
-
-                                    UE_LOG(LogTemp, Warning, TEXT("Move successful!"));
-
-                                    // Reset move mode
-                                    bMoveMode = false;
-                                    ClearAllHighlightsAndPaths();
-
-                                    // Show action widget again to allow attack after move
-                                    ShowMovementAndAttackWidget(UnitToMove);
-                                }
-                            }
-                            else
-                            {
-                                UE_LOG(LogTemp, Warning, TEXT("Target cell is not in movement range"));
-                            }
-                        }
-                        else
-                        {
-                            UE_LOG(LogTemp, Warning, TEXT("Clicked on empty cell but not in move mode or no unit selected"));
-                        }
-                    }
-                }
-                else
-                {
-                    UE_LOG(LogTemp, Warning, TEXT("Clicked outside grid bounds"));
-                }
-            }
-        }
-    }
-    else
-    {
-        UE_LOG(LogTemp, Warning, TEXT("No hit result under cursor"));
-    }
-}*/
-
 void ASaT_HumanPlayer::ShowUnitSelectionWidget()
 {
     // Get player controller
@@ -1020,6 +727,9 @@ void ASaT_HumanPlayer::ShowUnitSelectionWidget()
     UnitSelectionWidget = CreateWidget<UUserWidget>(PC, UnitSelectionWidgetClass);
     if (UnitSelectionWidget)
     {
+        // Add to viewport first
+        UnitSelectionWidget->AddToViewport(10000); // High Z-order to be above other UI
+
         // Find buttons in widget
         UButton* SniperButton = Cast<UButton>(UnitSelectionWidget->GetWidgetFromName(TEXT("SniperButton")));
         UButton* BrawlerButton = Cast<UButton>(UnitSelectionWidget->GetWidgetFromName(TEXT("BrawlerButton")));
@@ -1027,6 +737,7 @@ void ASaT_HumanPlayer::ShowUnitSelectionWidget()
         // Only bind events for units that haven't been placed yet
         if (SniperButton && !bSniperPlaced)
         {
+            SniperButton->OnClicked.Clear(); // Clear any existing bindings
             SniperButton->OnClicked.AddDynamic(this, &ASaT_HumanPlayer::OnUnitWidgetSniperSelected);
             UE_LOG(LogTemp, Display, TEXT("SniperButton found and bound to function"));
         }
@@ -1041,6 +752,7 @@ void ASaT_HumanPlayer::ShowUnitSelectionWidget()
 
         if (BrawlerButton && !bBrawlerPlaced)
         {
+            BrawlerButton->OnClicked.Clear(); // Clear any existing bindings
             BrawlerButton->OnClicked.AddDynamic(this, &ASaT_HumanPlayer::OnUnitWidgetBrawlerSelected);
             UE_LOG(LogTemp, Display, TEXT("BrawlerButton found and bound to function"));
         }
@@ -1053,12 +765,20 @@ void ASaT_HumanPlayer::ShowUnitSelectionWidget()
             UE_LOG(LogTemp, Warning, TEXT("BrawlerButton not found in widget!"));
         }
 
-        // Show widget
-        UnitSelectionWidget->AddToViewport();
+        // Set focus AFTER adding to viewport
+        FInputModeGameAndUI InputMode;
 
-        // Set focus on widget and show cursor
-        PC->SetInputMode(FInputModeUIOnly());
+        // VERY IMPORTANT: This is the critical part - explicitly set focus to the widget
+        InputMode.SetWidgetToFocus(UnitSelectionWidget->TakeWidget());
+
+        // Make sure mouse isn't locked
+        InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+
+        // Apply input mode
+        PC->SetInputMode(InputMode);
         PC->bShowMouseCursor = true;
+
+        UE_LOG(LogTemp, Warning, TEXT("Unit selection widget set up with proper focus"));
     }
     else
     {
@@ -1068,19 +788,21 @@ void ASaT_HumanPlayer::ShowUnitSelectionWidget()
 
 void ASaT_HumanPlayer::OnUnitWidgetSniperSelected()
 {
-    // Hide widget
+    // Hide widget and clean up reference
     if (UnitSelectionWidget)
     {
         UnitSelectionWidget->RemoveFromParent();
         UnitSelectionWidget = nullptr;
     }
 
-    // Restore normal input mode
+    // Use GameAndUI input mode consistently
     APlayerController* PC = GetWorld()->GetFirstPlayerController();
     if (PC)
     {
-        PC->SetInputMode(FInputModeGameOnly());
-        PC->bShowMouseCursor = true; // Keep cursor visible
+        FInputModeGameAndUI InputMode;
+        InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+        PC->SetInputMode(InputMode);
+        PC->bShowMouseCursor = true;
     }
 
     // Place Sniper at selected coordinates
@@ -1096,11 +818,13 @@ void ASaT_HumanPlayer::OnUnitWidgetBrawlerSelected()
         UnitSelectionWidget = nullptr;
     }
 
-    // Restore normal input mode
+    // Use GameAndUI input mode consistently
     APlayerController* PC = GetWorld()->GetFirstPlayerController();
     if (PC)
     {
-        PC->SetInputMode(FInputModeGameOnly());
+        FInputModeGameAndUI InputMode;
+        InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+        PC->SetInputMode(InputMode);
         PC->bShowMouseCursor = true; // Keep cursor visible
     }
 
@@ -1124,6 +848,22 @@ void ASaT_HumanPlayer::EndTurn()
 
     // Before switching turn, update GameInstance with our placed units count
     GameInstance->HumanUnitsPlaced = PlacedUnitsCount;
+
+    // Clean up any UI widgets before ending turn
+    if (UnitSelectionWidget)
+    {
+        UnitSelectionWidget->RemoveFromParent();
+        UnitSelectionWidget = nullptr;
+    }
+
+    // Restore normal input mode
+    APlayerController* PC = GetWorld()->GetFirstPlayerController();
+    if (PC)
+    {
+        // Don't change input mode when ending turn, as we'll set it correctly
+        // when the next turn starts
+        PC->bShowMouseCursor = true; // Keep cursor visible
+    }
 
     // Important: Set our own IsMyTurn to false BEFORE calling GameMode->EndTurn()
     IsMyTurn = false;
@@ -1157,51 +897,47 @@ void ASaT_HumanPlayer::ShowEndTurnButton()
         return;
     }
 
-    // Check if we have the widget class set
-    if (!EndTurnButtonWidgetClass)
+    // Create fresh widget
+    if (EndTurnWidget)
     {
-        UE_LOG(LogTemp, Error, TEXT("EndTurnButtonWidgetClass is not set! Cannot show End Turn button"));
-        return;
+        EndTurnWidget->RemoveFromParent();
+        EndTurnWidget = nullptr;
     }
 
-    // Create EndTurnButton widget if it doesn't exist
-    if (!EndTurnWidget && EndTurnButtonWidgetClass)
+    EndTurnWidget = CreateWidget<UUserWidget>(PC, EndTurnButtonWidgetClass);
+    if (EndTurnWidget)
     {
-        UE_LOG(LogTemp, Warning, TEXT("Creating new End Turn button widget"));
+        // Make sure the widget is visible and enabled
+        EndTurnWidget->SetVisibility(ESlateVisibility::Visible);
+        EndTurnWidget->SetIsEnabled(true);
 
-        // Use the class reference instead of trying to find it at runtime
-        EndTurnWidget = CreateWidget<UUserWidget>(PC, EndTurnButtonWidgetClass);
-        if (EndTurnWidget)
+        // Add to viewport with high Z-order - DO THIS ONLY ONCE
+        EndTurnWidget->AddToViewport(10000);
+
+        UButton* EndTurnBtn = Cast<UButton>(EndTurnWidget->GetWidgetFromName(TEXT("EndTurnButton")));
+        if (EndTurnBtn)
         {
-            EndTurnWidget->AddToViewport();
-            UE_LOG(LogTemp, Warning, TEXT("End Turn widget added to viewport"));
-
-            // Find and bind the button
-            UButton* EndTurnBtn = Cast<UButton>(EndTurnWidget->GetWidgetFromName(TEXT("EndTurnButton")));
-            if (EndTurnBtn)
-            {
-                EndTurnBtn->OnClicked.AddDynamic(this, &ASaT_HumanPlayer::EndTurn);
-                UE_LOG(LogTemp, Display, TEXT("End Turn Button bound successfully"));
-            }
-            else
-            {
-                UE_LOG(LogTemp, Error, TEXT("Failed to find EndTurnButton in widget"));
-            }
+            EndTurnBtn->OnClicked.Clear(); // Clear any existing bindings
+            EndTurnBtn->OnClicked.AddDynamic(this, &ASaT_HumanPlayer::EndTurn);
+            UE_LOG(LogTemp, Warning, TEXT("End Turn Button bound successfully"));
         }
         else
         {
-            UE_LOG(LogTemp, Error, TEXT("Failed to create End Turn widget"));
+            UE_LOG(LogTemp, Error, TEXT("Failed to find EndTurnButton in widget!"));
         }
-    }
-    else if (EndTurnWidget && !EndTurnWidget->IsInViewport())
-    {
-        // Make sure it's in the viewport if not already
-        UE_LOG(LogTemp, Warning, TEXT("Adding existing End Turn widget to viewport"));
-        EndTurnWidget->AddToViewport();
+
+        // IMPORTANT: Use GameAndUI mode consistently
+        FInputModeGameAndUI InputMode;
+        InputMode.SetWidgetToFocus(EndTurnWidget->TakeWidget());
+        InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+        PC->SetInputMode(InputMode);
+        PC->bShowMouseCursor = true;
+
+        UE_LOG(LogTemp, Warning, TEXT("End Turn widget set up with proper focus"));
     }
     else
     {
-        UE_LOG(LogTemp, Warning, TEXT("End Turn widget already exists and is in viewport"));
+        UE_LOG(LogTemp, Error, TEXT("Failed to create End Turn widget"));
     }
 }
 
@@ -1580,8 +1316,9 @@ void ASaT_HumanPlayer::ShowMovementAndAttackWidget(AUnit* UnitToShow)
     MovementAndAttackWidget = CreateWidget<UUserWidget>(PC, MovementAndAttackWidgetClass);
     if (MovementAndAttackWidget)
     {
-        // Add widget to viewport
-        MovementAndAttackWidget->AddToViewport();
+        // Add widget to viewport with high Z-order
+        MovementAndAttackWidget->AddToViewport(10000);
+        UE_LOG(LogTemp, Warning, TEXT("Movement and Attack widget added to viewport"));
 
         // Find and bind buttons
         UButton* MoveButton = Cast<UButton>(MovementAndAttackWidget->GetWidgetFromName(TEXT("MoveButton")));
@@ -1589,6 +1326,7 @@ void ASaT_HumanPlayer::ShowMovementAndAttackWidget(AUnit* UnitToShow)
 
         if (MoveButton)
         {
+            MoveButton->OnClicked.Clear(); // Clear existing bindings
             MoveButton->OnClicked.AddDynamic(this, &ASaT_HumanPlayer::OnMoveButtonClicked);
             UE_LOG(LogTemp, Display, TEXT("Move button bound successfully"));
         }
@@ -1599,6 +1337,7 @@ void ASaT_HumanPlayer::ShowMovementAndAttackWidget(AUnit* UnitToShow)
 
         if (AttackButton)
         {
+            AttackButton->OnClicked.Clear(); // Clear existing bindings
             AttackButton->OnClicked.AddDynamic(this, &ASaT_HumanPlayer::OnAttackButtonClicked);
             UE_LOG(LogTemp, Display, TEXT("Attack button bound successfully"));
         }
@@ -1607,27 +1346,14 @@ void ASaT_HumanPlayer::ShowMovementAndAttackWidget(AUnit* UnitToShow)
             UE_LOG(LogTemp, Warning, TEXT("AttackButton not found in widget!"));
         }
 
-        // Update unit name text if it exists
-        //UTextBlock* UnitNameText = Cast<UTextBlock>(MovementAndAttackWidget->GetWidgetFromName(TEXT("UnitNameText")));
-        //if (UnitNameText && Unit)
-        //{
-            // Determine unit type
-           // FString UnitType = Cast<ASniper>(Unit) ? TEXT("Sniper") : TEXT("Brawler");
-           // UnitNameText->SetText(FText::FromString(FString::Printf(TEXT("%s at (%d,%d)"),
-                //*UnitType, Unit->GridX, Unit->GridY)));
-        //}
+        // IMPORTANT: Set the input mode with proper focus
+        FInputModeGameAndUI InputMode;
+        InputMode.SetWidgetToFocus(MovementAndAttackWidget->TakeWidget());
+        InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+        PC->SetInputMode(InputMode);
+        PC->bShowMouseCursor = true;
 
-        // Disable attack button if unit has already attacked
-        //if (AttackButton && UnitAttackedThisTurn.Contains(Unit) && UnitAttackedThisTurn[Unit])
-        //{
-            //AttackButton->SetIsEnabled(false);
-        //}
-
-        // Disable move button if unit has already moved
-        //if (MoveButton && Unit && Unit->bHasMovedThisTurn)
-        //{
-           // MoveButton->SetIsEnabled(false);
-        //}
+        UE_LOG(LogTemp, Warning, TEXT("Movement and Attack widget set up with proper focus"));
     }
     else
     {
