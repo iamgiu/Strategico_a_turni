@@ -2,9 +2,11 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/GameModeBase.h"
+#include "Unit.h"
 #include "SaT_Enums.h"
 #include "SaT_GameMode.generated.h"
 
+class UMainGameHUDClass;
 class ISaT_PlayerInterface;
 class AGridManager;
 class AUnit;
@@ -29,6 +31,8 @@ public:
 	void EndTurn();
 	bool CheckGameOver();
 
+	void UpdateGameHUD();
+
 	/* ATTRIBUTES */
 	UPROPERTY(EditDefaultsOnly)
 	TSubclassOf<AGridManager> GameManagerClass;
@@ -42,6 +46,57 @@ public:
 
 	UPROPERTY(BlueprintReadOnly, Category = "Game")
 	EPlayerType CurrentPlayerType;
+
+	UPROPERTY(BlueprintReadOnly, Category = "UI")
+	AUnit* SomeUnitVariable;
+
+	UPROPERTY(BlueprintReadOnly, Category = "UI")
+	int32 PlayerSniperHP;
+
+	UPROPERTY(BlueprintReadOnly, Category = "UI")
+	int32 PlayerBrawlerHP;
+
+	UPROPERTY(BlueprintReadOnly, Category = "UI")
+	int32 AISniperHP;
+
+	UPROPERTY(BlueprintReadOnly, Category = "UI")
+	int32 AIBrawlerHP;
+
+	UPROPERTY(BlueprintReadOnly, Category = "UI")
+	FString PlayerSniperPos;
+
+	UPROPERTY(BlueprintReadOnly, Category = "UI")
+	FString PlayerBrawlerPos;
+
+	UPROPERTY(BlueprintReadOnly, Category = "UI")
+	FString AISniperPos;
+
+	UPROPERTY(BlueprintReadOnly, Category = "UI")
+	FString AIBrawlerPos;
+
+	UPROPERTY(BlueprintReadOnly, Category = "UI")
+	bool IsPlayerTurn;
+
+	UPROPERTY(BlueprintReadOnly, Category = "UI")
+	int32 CurrentTurnNumber;
+
+	UPROPERTY(EditDefaultsOnly, Category = "UI")
+	TSubclassOf<UUserWidget> MainGameHUDClass;
+
+	UPROPERTY(BlueprintReadOnly, Category = "UI")
+	FString PlayerSniperHPFormatted;
+
+	UPROPERTY(BlueprintReadOnly, Category = "UI")
+	FString PlayerBrawlerHPFormatted;
+
+	UPROPERTY(BlueprintReadOnly, Category = "UI")
+	FString AISniperHPFormatted;
+
+	UPROPERTY(BlueprintReadOnly, Category = "UI")
+	FString AIBrawlerHPFormatted;
+
+	UPROPERTY(BlueprintReadOnly, Category = "UI")
+	FString TurnText;
 
 protected:
 

@@ -55,4 +55,6 @@ public:
     // Gets the current game phase
     UFUNCTION(BlueprintPure, Category = "Game")
     EGamePhase GetGamePhase() const;
+
+    int32 CurrentTurnNumber;
 };

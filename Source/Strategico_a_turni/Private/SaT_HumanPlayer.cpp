@@ -203,6 +203,14 @@ void ASaT_HumanPlayer::OnTurn()
 
         if (CurrentPhase == EGamePhase::SETUP)
         {
+
+            if (PlacedUnitsCount >= UnitsToPlace)
+            {
+                UE_LOG(LogTemp, Warning, TEXT("Already placed all units (%d/%d). End your turn."),
+                    PlacedUnitsCount, UnitsToPlace);
+                return;
+            }
+
             // Update our placed units count to match the GameInstance
             PlacedUnitsCount = GameInstance->HumanUnitsPlaced;
             UnitsToPlace = 2; // Ensure this is set correctly
@@ -238,6 +246,24 @@ void ASaT_HumanPlayer::OnTurn()
     }
 }
 
+void ASaT_HumanPlayer::OnWin()
+{
+    // Implementation for when the player wins
+    UE_LOG(LogTemp, Warning, TEXT("Human Player has won!"));
+
+    // You can add additional win logic here, like showing a victory UI
+}
+
+void ASaT_HumanPlayer::OnLose()
+{
+    // Implementation for when the player loses
+    UE_LOG(LogTemp, Warning, TEXT("Human Player has lost!"));
+
+    // You can add additional loss logic here, like showing a defeat UI
+}
+
+
+
 // Implement HasPlacedAllUnits
 bool ASaT_HumanPlayer::HasPlacedAllUnits() const
 {
@@ -246,6 +272,14 @@ bool ASaT_HumanPlayer::HasPlacedAllUnits() const
 
 void ASaT_HumanPlayer::PlaceUnit(int32 GridX, int32 GridY, bool bIsSniper)
 {
+
+    if (PlacedUnitsCount >= UnitsToPlace)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("Cannot place more units - already placed maximum (%d/%d)"),
+            PlacedUnitsCount, UnitsToPlace);
+        return;
+    }
+
     // Add detailed logs
     UE_LOG(LogTemp, Warning, TEXT("PlaceUnit called with coordinates: X=%d, Y=%d"), GridX, GridY);
 
@@ -327,49 +361,57 @@ void ASaT_HumanPlayer::PlaceUnit(int32 GridX, int32 GridY, bool bIsSniper)
 }
 
 
-void ASaT_HumanPlayer::OnWin()
-{
-    // Base implementation
-}
-
-void ASaT_HumanPlayer::OnLose()
-{
-    // Base implementation
-}
-
 void ASaT_HumanPlayer::OnClick()
 {
+    // Debug log to confirm function is called
+    UE_LOG(LogTemp, Warning, TEXT("OnClick called - IsMyTurn: %s"), IsMyTurn ? TEXT("TRUE") : TEXT("FALSE"));
+
     // Check if it's this player's turn
     if (!IsMyTurn)
     {
-        // Add explicit debug info - check game instance too
-        GameInstance = Cast<USaT_GameInstance>(UGameplayStatics::GetGameInstance(GetWorld()));
-        bool gameInstancePlayerTurn = GameInstance ? GameInstance->bIsPlayerTurn : false;
-
-        UE_LOG(LogTemp, Warning, TEXT("Not your turn! Cannot interact with the game. IsMyTurn=%s, GameInstance.bIsPlayerTurn=%s"),
-            IsMyTurn ? TEXT("TRUE") : TEXT("FALSE"),
-            gameInstancePlayerTurn ? TEXT("TRUE") : TEXT("FALSE"));
-        return; // Exit early if it's not the player's turn
+        UE_LOG(LogTemp, Warning, TEXT("Not your turn! Cannot interact with the game."));
+        return;
     }
 
-    UE_LOG(LogTemp, Display, TEXT("OnClick called - interaction allowed"));
+    // Get current game phase
+    if (GameInstance)
+    {
+        CurrentPhase = GameInstance->GetGamePhase();
+    }
 
     // Get player controller
     APlayerController* PC = GetWorld()->GetFirstPlayerController();
-    if (PC)
+    if (!PC)
     {
-        FHitResult HitResult;
-        PC->GetHitResultUnderCursor(ECC_Visibility, false, HitResult);
+        UE_LOG(LogTemp, Error, TEXT("Failed to get PlayerController in OnClick"));
+        return;
+    }
 
-        if (HitResult.bBlockingHit)
+    // Use a more reliable hit detection method with ECC_Visibility channel
+    FHitResult HitResult;
+    bool bHitSuccess = PC->GetHitResultUnderCursor(ECC_Visibility, true, HitResult);
+
+    if (bHitSuccess)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("Hit detected at world location: %s"), *HitResult.Location.ToString());
+
+        // === SETUP PHASE HANDLING ===
+        if (CurrentPhase == EGamePhase::SETUP)
         {
-            // Select cell
+            // Check if already placed all units
+            if (PlacedUnitsCount >= UnitsToPlace)
+            {
+                UE_LOG(LogTemp, Warning, TEXT("Already placed all units (%d/%d). End your turn."),
+                    PlacedUnitsCount, UnitsToPlace);
+                return;
+            }
+
+            // Store selection location
             LastSelectedCell = HitResult.Location;
 
-            // Convert 3D position to grid coordinates
-            // Use GetXYPositionByRelativeLocation from GridManager if available
             if (GridManager)
             {
+                // Get grid coordinates from world location
                 FVector2D GridPosition = GridManager->GetXYPositionByRelativeLocation(HitResult.Location);
                 SelectedGridX = FMath::FloorToInt(GridPosition.X);
                 SelectedGridY = FMath::FloorToInt(GridPosition.Y);
@@ -377,18 +419,230 @@ void ASaT_HumanPlayer::OnClick()
                 UE_LOG(LogTemp, Warning, TEXT("Cell selected in grid coordinates: X=%d, Y=%d"),
                     SelectedGridX, SelectedGridY);
 
-                // Check if cell is occupied using GridManager
-                if (!GridManager->IsCellOccupied(SelectedGridX, SelectedGridY))
+                // Ensure grid position is valid
+                if (SelectedGridX >= 0 && SelectedGridX < 25 && SelectedGridY >= 0 && SelectedGridY < 25)
                 {
-                    //UE_LOG(LogTemp, Display, TEXT("Empty cell! Showing unit selection widget"));
-                    ShowUnitSelectionWidget();
+                    // Check if cell is occupied
+                    if (!GridManager->IsCellOccupied(SelectedGridX, SelectedGridY))
+                    {
+                        // Cell is empty, show unit selection UI
+                        ShowUnitSelectionWidget();
+                    }
+                    else
+                    {
+                        UE_LOG(LogTemp, Warning, TEXT("Cell occupied! Cannot place a unit here"));
+                    }
                 }
                 else
                 {
-                    UE_LOG(LogTemp, Warning, TEXT("Cell occupied! Cannot place a unit here"));
+                    UE_LOG(LogTemp, Warning, TEXT("Selected position outside grid bounds"));
+                }
+            }
+            else
+            {
+                UE_LOG(LogTemp, Error, TEXT("GridManager is not valid"));
+            }
+        }
+        // === PLAYING PHASE HANDLING ===
+        else if (CurrentPhase == EGamePhase::PLAYING)
+        {
+            UE_LOG(LogTemp, Warning, TEXT("Click detected in PLAYING phase"));
+
+            // First, try to cast the hit actor to AUnit
+            AUnit* ClickedUnit = Cast<AUnit>(HitResult.GetActor());
+
+            // Debug more information about what was hit
+            if (HitResult.GetActor())
+            {
+                UE_LOG(LogTemp, Warning, TEXT("Hit actor class: %s"), *HitResult.GetActor()->GetClass()->GetName());
+            }
+
+            // Process hitting a unit directly
+            if (ClickedUnit && ClickedUnit->bIsPlayerUnit)
+            {
+                UE_LOG(LogTemp, Warning, TEXT("Direct hit on player unit at %d, %d"),
+                    ClickedUnit->GridX, ClickedUnit->GridY);
+
+                // If we click on the already selected unit, deselect it
+                if (SelectedUnit == ClickedUnit)
+                {
+                    UE_LOG(LogTemp, Warning, TEXT("Deselecting currently selected unit"));
+                    SelectedUnit->UnshowSelected();
+                    SelectedUnit = nullptr;
+
+                    // Use the helper method to clear all highlights
+                    ClearAllHighlightsAndPaths();
+                }
+                // Otherwise, select the new unit
+                else
+                {
+                    // Deselect any previously selected unit and clear its highlights
+                    if (SelectedUnit)
+                    {
+                        UE_LOG(LogTemp, Warning, TEXT("Deselecting previous unit"));
+                        SelectedUnit->UnshowSelected();
+
+                        // Use the helper method to clear all highlights
+                        ClearAllHighlightsAndPaths();
+                    }
+
+                    // Select the new unit
+                    SelectedUnit = ClickedUnit;
+                    UE_LOG(LogTemp, Warning, TEXT("Selecting unit at %d,%d and changing material"),
+                        SelectedUnit->GridX, SelectedUnit->GridY);
+                    SelectedUnit->ShowSelected();
+
+                    // Show valid movement range for the selected unit
+                    ShowMovementRange(SelectedUnit);
+                }
+            }
+            // If we didn't hit a unit directly, check tile at hit location
+            else
+            {
+                if (GridManager)
+                {
+                    // Get grid coordinates from hit location
+                    FVector2D GridPosition = GridManager->GetXYPositionByRelativeLocation(HitResult.Location);
+                    int32 TargetGridX = FMath::FloorToInt(GridPosition.X);
+                    int32 TargetGridY = FMath::FloorToInt(GridPosition.Y);
+
+                    UE_LOG(LogTemp, Warning, TEXT("Hit grid position: %d, %d"), TargetGridX, TargetGridY);
+
+                    // Make sure position is in grid bounds
+                    if (TargetGridX >= 0 && TargetGridX < 25 && TargetGridY >= 0 && TargetGridY < 25)
+                    {
+                        // Check if there's a unit at this grid position
+                        if (GridManager->IsCellOccupied(TargetGridX, TargetGridY))
+                        {
+                            // Try to get the tile and its occupying unit
+                            ATile* Tile = nullptr;
+                            if (GridManager->TileMap.Contains(FVector2D(TargetGridX, TargetGridY)))
+                            {
+                                Tile = GridManager->TileMap[FVector2D(TargetGridX, TargetGridY)];
+                            }
+
+                            // If we found a tile with a player unit
+                            if (Tile && Tile->OccupyingUnit && Tile->OccupyingUnit->bIsPlayerUnit)
+                            {
+                                UE_LOG(LogTemp, Warning, TEXT("Found player unit at tile %d, %d"),
+                                    TargetGridX, TargetGridY);
+
+                                // If already selected, deselect
+                                if (SelectedUnit == Tile->OccupyingUnit)
+                                {
+                                    UE_LOG(LogTemp, Warning, TEXT("Deselecting currently selected unit"));
+                                    SelectedUnit->UnshowSelected();
+                                    SelectedUnit = nullptr;
+
+                                    // Use the helper method to clear all highlights
+                                    ClearAllHighlightsAndPaths();
+                                }
+                                else
+                                {
+                                    // If we had a previously selected unit, deselect it and clear highlights
+                                    if (SelectedUnit)
+                                    {
+                                        UE_LOG(LogTemp, Warning, TEXT("Deselecting previous unit"));
+                                        SelectedUnit->UnshowSelected();
+
+                                        // Use the helper method to clear all highlights
+                                        ClearAllHighlightsAndPaths();
+                                    }
+
+                                    // Select the new unit
+                                    SelectedUnit = Tile->OccupyingUnit;
+                                    SelectedUnit->ShowSelected();
+
+                                    // Show movement range
+                                    ShowMovementRange(SelectedUnit);
+                                }
+                            }
+                            // If there's an enemy unit - could implement attack logic here
+                            else if (Tile && Tile->OccupyingUnit)
+                            {
+                                UE_LOG(LogTemp, Warning, TEXT("Found enemy unit at tile %d, %d"),
+                                    TargetGridX, TargetGridY);
+
+                                // If we have a selected unit, and it's in range, we could attack
+                                // TODO: Add attack logic here
+                            }
+                        }
+                        // Empty cell and we have a unit selected - try to move if it's highlighted
+                        else if (SelectedUnit)
+                        {
+                            UE_LOG(LogTemp, Warning, TEXT("Attempting to move unit to %d, %d"),
+                                TargetGridX, TargetGridY);
+
+                            // Check if this cell is highlighted (in movement range)
+                            bool bIsInMovementRange = false;
+                            ATile* TargetTile = nullptr;
+
+                            if (GridManager->TileMap.Contains(FVector2D(TargetGridX, TargetGridY)))
+                            {
+                                TargetTile = GridManager->TileMap[FVector2D(TargetGridX, TargetGridY)];
+                                bIsInMovementRange = GridManager->HighlightedTiles.Contains(TargetTile);
+                            }
+
+                            if (bIsInMovementRange)
+                            {
+                                // Calculate and show the path before actually moving
+                                CalculatePath(SelectedUnit->GridX, SelectedUnit->GridY, TargetGridX, TargetGridY);
+
+                                // Move is valid - it's in the highlighted range
+                                UE_LOG(LogTemp, Warning, TEXT("Moving unit from %d,%d to %d,%d"),
+                                    SelectedUnit->GridX, SelectedUnit->GridY, TargetGridX, TargetGridY);
+
+                                // Store reference to unit before nullifying selected unit
+                                AUnit* UnitToMove = SelectedUnit;
+
+                                // Deselect unit BEFORE moving
+                                SelectedUnit->UnshowSelected();
+                                SelectedUnit = nullptr;
+
+                                // Use the helper method to clear all highlights
+                                ClearAllHighlightsAndPaths();
+
+                                // Update grid state - free old cell
+                                GridManager->OccupyCell(UnitToMove->GridX, UnitToMove->GridY, nullptr);
+
+                                // Move the unit physically
+                                FVector NewLocation = GridManager->GetWorldLocationFromGrid(TargetGridX, TargetGridY);
+                                UnitToMove->GridX = TargetGridX;
+                                UnitToMove->GridY = TargetGridY;
+                                UnitToMove->SetActorLocation(NewLocation);
+
+                                // Occupy new cell
+                                GridManager->OccupyCell(TargetGridX, TargetGridY, UnitToMove);
+
+                                UE_LOG(LogTemp, Warning, TEXT("Unit moved successfully"));
+                            }
+                            else
+                            {
+                                // Move is invalid - not in highlighted movement range
+                                UE_LOG(LogTemp, Warning, TEXT("Invalid move: Target cell not in movement range"));
+                            }
+                        }
+                        // Empty cell with no unit selected
+                        else
+                        {
+                            UE_LOG(LogTemp, Warning, TEXT("Clicked on empty space with no unit selected"));
+                        }
+                    }
+                    else
+                    {
+                        UE_LOG(LogTemp, Warning, TEXT("Click outside valid grid bounds"));
+                    }
+                }
+                else
+                {
+                    UE_LOG(LogTemp, Error, TEXT("GridManager is invalid"));
                 }
             }
         }
+    }
+    else
+    {
+        UE_LOG(LogTemp, Warning, TEXT("No hit result under cursor"));
     }
 }
 
@@ -501,6 +755,8 @@ void ASaT_HumanPlayer::EndTurn()
 {
     UE_LOG(LogTemp, Warning, TEXT("Human Player ending turn"));
 
+    ClearAllHighlightsAndPaths();
+
     // Get the game instance to pass turn
     GameInstance = Cast<USaT_GameInstance>(UGameplayStatics::GetGameInstance(GetWorld()));
     if (!GameInstance)
@@ -589,5 +845,201 @@ void ASaT_HumanPlayer::ShowEndTurnButton()
     else
     {
         UE_LOG(LogTemp, Warning, TEXT("End Turn widget already exists and is in viewport"));
+    }
+}
+
+void ASaT_HumanPlayer::ShowMovementRange(AUnit* Unit)
+{
+    if (!Unit || !GridManager)
+    {
+        return;
+    }
+
+    // Clear only movement highlights, not path highlights
+    GridManager->ClearAllHighlights();
+
+    // Get the unit's current position and movement range
+    int32 UnitX = Unit->GridX;
+    int32 UnitY = Unit->GridY;
+    int32 MovementRange = Unit->Movement;
+
+    UE_LOG(LogTemp, Warning, TEXT("Showing movement range for unit at (%d, %d) with range %d"),
+        UnitX, UnitY, MovementRange);
+
+    // BFS to find all reachable cells within movement range
+    // Initialize visited array (25x25 grid)
+    bool Visited[25][25] = { false };
+
+    // Queue for BFS - stores positions and remaining movement
+    TQueue<TPair<FVector2D, int32>> Queue;
+
+    // Start at unit position with full movement range
+    Queue.Enqueue(TPair<FVector2D, int32>(FVector2D(UnitX, UnitY), MovementRange));
+    Visited[UnitX][UnitY] = true;
+
+    // Direction vectors for the four cardinal directions
+    int32 dx[] = { 1, -1, 0, 0 };
+    int32 dy[] = { 0, 0, 1, -1 };
+
+    // Track how many cells we highlight
+    int32 HighlightedCount = 0;
+
+    while (!Queue.IsEmpty())
+    {
+        TPair<FVector2D, int32> Current;
+        Queue.Dequeue(Current);
+
+        FVector2D Pos = Current.Key;
+        int32 RemainingMovement = Current.Value;
+
+        int32 CurrX = FMath::FloorToInt(Pos.X);
+        int32 CurrY = FMath::FloorToInt(Pos.Y);
+
+        // Highlight the cell if it's not the unit's position
+        if (CurrX != UnitX || CurrY != UnitY)
+        {
+            GridManager->HighlightCell(CurrX, CurrY, true);
+            HighlightedCount++;
+        }
+
+        // If no more movement left, don't explore further from this cell
+        if (RemainingMovement <= 0)
+        {
+            continue;
+        }
+
+        // Try all four directions
+        for (int32 i = 0; i < 4; i++)
+        {
+            int32 NewX = CurrX + dx[i];
+            int32 NewY = CurrY + dy[i];
+
+            // Check if new position is valid and not visited
+            if (GridManager->IsValidPosition(FVector2D(NewX, NewY)) && !Visited[NewX][NewY])
+            {
+                // Check if the cell is not occupied (except by the unit itself)
+                bool bIsCellFree = !GridManager->IsCellOccupied(NewX, NewY) ||
+                    (NewX == UnitX && NewY == UnitY);
+
+                if (bIsCellFree)
+                {
+                    // Mark as visited and add to the queue with one less movement point
+                    Visited[NewX][NewY] = true;
+                    Queue.Enqueue(TPair<FVector2D, int32>(FVector2D(NewX, NewY), RemainingMovement - 1));
+                }
+            }
+        }
+    }
+
+    UE_LOG(LogTemp, Warning, TEXT("Movement range visualization complete: %d cells highlighted"), HighlightedCount);
+}
+
+bool ASaT_HumanPlayer::TryMoveUnit(AUnit* Unit, int32 TargetGridX, int32 TargetGridY)
+{
+    if (!Unit || !GridManager)
+    {
+        return false;
+    }
+
+    // Check if the target position is within movement range
+    int32 Distance = FMath::Abs(TargetGridX - Unit->GridX) + FMath::Abs(TargetGridY - Unit->GridY);
+
+    if (Distance <= Unit->Movement && !GridManager->IsCellOccupied(TargetGridX, TargetGridY))
+    {
+        // Free the current cell
+        GridManager->OccupyCell(Unit->GridX, Unit->GridY, nullptr);
+
+        // Calculate the new world position
+        FVector NewLocation = GridManager->GetWorldLocationFromGrid(TargetGridX, TargetGridY);
+
+        // Update unit position
+        Unit->GridX = TargetGridX;
+        Unit->GridY = TargetGridY;
+        Unit->SetActorLocation(NewLocation);
+
+        // Mark the new cell as occupied
+        GridManager->OccupyCell(TargetGridX, TargetGridY, Unit);
+
+        UE_LOG(LogTemp, Display, TEXT("Unit moved to %d, %d"), TargetGridX, TargetGridY);
+
+        // Clear movement highlights
+        // GridManager->ClearHighlights();
+
+        return true;
+    }
+
+    return false;
+}
+
+void ASaT_HumanPlayer::CalculatePath(int32 StartX, int32 StartY, int32 EndX, int32 EndY)
+{
+    // Clear existing path array
+    CurrentPath.Empty();
+
+    // Always start with the source position
+    CurrentPath.Add(FVector2D(StartX, StartY));
+
+    // Calculate Manhattan path (this will always move horizontally first, then vertically)
+    // You could modify this to choose different path strategies
+
+    int32 CurrentX = StartX;
+    int32 CurrentY = StartY;
+
+    // Move horizontally first to align X-coordinate
+    while (CurrentX != EndX)
+    {
+        CurrentX += (CurrentX < EndX) ? 1 : -1;
+
+        // Skip if cell is occupied (except for the destination)
+        if (GridManager->IsCellOccupied(CurrentX, CurrentY) && (CurrentX != EndX || CurrentY != EndY))
+            continue;
+
+        CurrentPath.Add(FVector2D(CurrentX, CurrentY));
+    }
+
+    // Then move vertically to align Y-coordinate
+    while (CurrentY != EndY)
+    {
+        CurrentY += (CurrentY < EndY) ? 1 : -1;
+
+        // Skip if cell is occupied (except for the destination)
+        if (GridManager->IsCellOccupied(CurrentX, CurrentY) && (CurrentX != EndX || CurrentY != EndY))
+            continue;
+
+        CurrentPath.Add(FVector2D(CurrentX, CurrentY));
+    }
+
+    // Display the path WITHOUT clearing previous path
+    if (GridManager)
+    {
+        // Pass false to prevent clearing previous path
+        GridManager->HighlightPath(CurrentPath, false);
+    }
+}
+
+void ASaT_HumanPlayer::ClearPath()
+{
+    CurrentPath.Empty();
+
+    if (GridManager)
+    {
+        GridManager->ClearPathHighlights();
+    }
+}
+
+void ASaT_HumanPlayer::ClearAllHighlightsAndPaths()
+{
+    if (GridManager)
+    {
+        // First clear the highlighted tiles
+        GridManager->ClearAllHighlights();
+
+        // Then clear the path tiles
+        GridManager->ClearPathHighlights();
+
+        // Also clear our path tracking array
+        CurrentPath.Empty();
+
+        UE_LOG(LogTemp, Warning, TEXT("All highlights and paths cleared"));
     }
 }

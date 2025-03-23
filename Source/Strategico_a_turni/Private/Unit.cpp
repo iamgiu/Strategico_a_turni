@@ -25,8 +25,8 @@ AUnit::AUnit()
     Hp = 100;
 
     // Default position
-    GridX = 0;
-    GridY = 0;
+    GridX = 1;
+    GridY = 1;
     UnitGridPosition = FVector2D(0.0f, 0.0f);
 
     // Default team (will be set properly when spawned)
@@ -38,10 +38,24 @@ void AUnit::BeginPlay()
 {
     Super::BeginPlay();
 
+    // Make sure we have valid materials
+    if (BaseMaterial == nullptr)
+    {
+        UE_LOG(LogTemp, Error, TEXT("Unit %s: BaseMaterial is not set!"), *GetName());
+        // Maybe set a default material here
+    }
+
+    if (SelectedMaterial == nullptr)
+    {
+        UE_LOG(LogTemp, Error, TEXT("Unit %s: SelectedMaterial is not set!"), *GetName());
+        // Maybe set a default material here
+    }
+
     // Set the initial material
     if (BaseMaterial)
     {
         StaticMeshComponent->SetMaterial(0, BaseMaterial);
+        UE_LOG(LogTemp, Warning, TEXT("Unit %s: Initial material set to BaseMaterial"), *GetName());
     }
 }
 
@@ -50,7 +64,12 @@ void AUnit::ShowSelected()
     // Change the material to show the unit is selected
     if (SelectedMaterial)
     {
+        UE_LOG(LogTemp, Warning, TEXT("Unit %s: Applying selected material"), *GetName());
         StaticMeshComponent->SetMaterial(0, SelectedMaterial);
+    }
+    else
+    {
+        UE_LOG(LogTemp, Error, TEXT("Unit %s: SelectedMaterial is NULL!"), *GetName());
     }
 }
 
@@ -59,7 +78,12 @@ void AUnit::UnshowSelected()
     // Change back to the base material
     if (BaseMaterial)
     {
+        UE_LOG(LogTemp, Warning, TEXT("Unit %s: Applying base material"), *GetName());
         StaticMeshComponent->SetMaterial(0, BaseMaterial);
+    }
+    else
+    {
+        UE_LOG(LogTemp, Error, TEXT("Unit %s: BaseMaterial is NULL!"), *GetName());
     }
 }
 

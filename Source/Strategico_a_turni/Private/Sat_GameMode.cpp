@@ -3,10 +3,13 @@
 #include "SaT_GameMode.h"
 #include "GridManager.h"
 #include "Unit.h"
+#include "Sniper.h"
+#include "Brawler.h"
 #include "SaT_PlayerInterface.h"
 #include "SaT_HumanPlayer.h"
 #include "SaT_RandomPlayer.h"
 #include "SaT_GameInstance.h"
+#include "Blueprint/UserWidget.h"
 #include "Kismet/GameplayStatics.h"
 
 ASaT_GameMode::ASaT_GameMode()
@@ -92,6 +95,19 @@ void ASaT_GameMode::BeginPlay()
 
         // Set game to SETUP phase first, not directly to PLAYING
         GameInstance = Cast<USaT_GameInstance>(UGameplayStatics::GetGameInstance(GetWorld()));
+    }
+
+    if (MainGameHUDClass) // You need to set this reference in your Blueprint
+    {
+        APlayerController* PC = UGameplayStatics::GetPlayerController(GetWorld(), 0);
+        if (PC)
+        {
+            UUserWidget* GameHUD = CreateWidget<UUserWidget>(PC, MainGameHUDClass);
+            if (GameHUD)
+            {
+                GameHUD->AddToViewport();
+            }
+        }
     }
 }
 
@@ -216,7 +232,10 @@ void ASaT_GameMode::StartGame()
     // Start first turn
     StartFirstTurn();
 
+    UpdateGameHUD();
+
     UE_LOG(LogTemp, Warning, TEXT("===== GAME SUCCESSFULLY STARTED ====="));
+
 }
 
 void ASaT_GameMode::FlipCoinToDecideFirstPlayer()
@@ -353,6 +372,8 @@ void ASaT_GameMode::EndTurn()
     UE_LOG(LogTemp, Warning, TEXT("After turn switch - Current turn is now: %s (player index %d)"),
         bIsHumanTurn ? TEXT("HUMAN") : TEXT("AI"),
         CurrentPlayer);
+
+    UpdateGameHUD();
 
     // Schedule notification for the next player
     FTimerHandle TimerHandle;
@@ -502,4 +523,94 @@ void ASaT_GameMode::NotifyCurrentPlayerTurn()
         UE_LOG(LogTemp, Error, TEXT("PlayerToNotify is null!"));
     }
 
+    UpdateGameHUD();
+
+}
+
+void ASaT_GameMode::UpdateGameHUD()
+{
+    // Find all player units and get their status
+    TArray<AActor*> AllUnits;
+    UGameplayStatics::GetAllActorsOfClass(GetWorld(), AUnit::StaticClass(), AllUnits);
+
+    // Initialize positions with placeholders
+    PlayerSniperPos = TEXT("(--,--)");
+    PlayerBrawlerPos = TEXT("(--,--)");
+    AISniperPos = TEXT("(--,--)");
+    AIBrawlerPos = TEXT("(--,--)");
+
+    // Set default HP values (based on unit definitions)
+    PlayerSniperHP = 0;
+    PlayerBrawlerHP = 0;
+    AISniperHP = 0;
+    AIBrawlerHP = 0;
+
+    for (AActor* UnitActor : AllUnits)
+    {
+        AUnit* Unit = Cast<AUnit>(UnitActor);
+        if (Unit)
+        {
+            if (Unit->bIsPlayerUnit)
+            {
+                // Check unit type
+                if (Cast<ASniper>(Unit))
+                {
+                    // Update player sniper info
+                    PlayerSniperHP = Unit->Hp;
+                    PlayerSniperPos = FString::Printf(TEXT("(%d,%d)"), Unit->GridX, Unit->GridY);
+                }
+                else if (Cast<ABrawler>(Unit))
+                {
+                    // Update player brawler info
+                    PlayerBrawlerHP = Unit->Hp;
+                    PlayerBrawlerPos = FString::Printf(TEXT("(%d,%d)"), Unit->GridX, Unit->GridY);
+                }
+            }
+            else
+            {
+                // AI units
+                if (Cast<ASniper>(Unit))
+                {
+                    // Update AI sniper info
+                    AISniperHP = Unit->Hp;
+                    AISniperPos = FString::Printf(TEXT("(%d,%d)"), Unit->GridX, Unit->GridY);
+                }
+                else if (Cast<ABrawler>(Unit))
+                {
+                    // Update AI brawler info
+                    AIBrawlerHP = Unit->Hp;
+                    AIBrawlerPos = FString::Printf(TEXT("(%d,%d)"), Unit->GridX, Unit->GridY);
+                }
+            }
+        }
+    }
+
+    // Update turn info
+    USaT_GameInstance* GameInstance = Cast<USaT_GameInstance>(UGameplayStatics::GetGameInstance(GetWorld()));
+    if (GameInstance)
+    {
+        // Set who's turn it is
+        IsPlayerTurn = GameInstance->bIsPlayerTurn;
+        // Get the current turn number
+        CurrentTurnNumber = GameInstance->CurrentTurnNumber;
+    }
+
+    // NEW CODE: Create formatted text for the UI
+    // Format HP values with max values
+    PlayerSniperHPFormatted = FString::Printf(TEXT("%d/20"), PlayerSniperHP);
+    PlayerBrawlerHPFormatted = FString::Printf(TEXT("%d/40"), PlayerBrawlerHP);
+    AISniperHPFormatted = FString::Printf(TEXT("%d/20"), AISniperHP);
+    AIBrawlerHPFormatted = FString::Printf(TEXT("%d/40"), AIBrawlerHP);
+
+    // Format turn display
+    TurnText = IsPlayerTurn
+        ? FString::Printf(TEXT("Human Turn %d"), CurrentTurnNumber)
+        : FString::Printf(TEXT("AI Turn %d"), CurrentTurnNumber);
+
+    UE_LOG(LogTemp, Warning, TEXT("HUD Data - Player: Sniper=%s (%s), Brawler=%s (%s)"),
+        *PlayerSniperPos, *PlayerSniperHPFormatted, *PlayerBrawlerPos, *PlayerBrawlerHPFormatted);
+    UE_LOG(LogTemp, Warning, TEXT("HUD Data - AI: Sniper=%s (%s), Brawler=%s (%s)"),
+        *AISniperPos, *AISniperHPFormatted, *AIBrawlerPos, *AIBrawlerHPFormatted);
+    UE_LOG(LogTemp, Warning, TEXT("HUD Data - Turn: %s, Number=%d"),
+        *TurnText, CurrentTurnNumber);
 }

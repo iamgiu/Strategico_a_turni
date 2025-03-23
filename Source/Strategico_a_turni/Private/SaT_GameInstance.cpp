@@ -15,6 +15,7 @@ USaT_GameInstance::USaT_GameInstance()
     CurrentPhase = EGamePhase::SETUP;
     HumanUnitsPlaced = 0;
     AIUnitsPlaced = 0;
+    CurrentTurnNumber = 1;
 }
 
 void USaT_GameInstance::TossCoin()
@@ -48,13 +49,21 @@ void USaT_GameInstance::SwitchTurn()
 {
     // Log the current state before switching
     UE_LOG(LogTemp, Warning, TEXT("===== SWITCHING TURNS ====="));
+
+    // Always toggle the turn flag
+    bIsPlayerTurn = !bIsPlayerTurn;
+
+    // If we've completed a full turn cycle (both players have moved)
+    if (bIsPlayerTurn) // When returning to human player
+    {
+        // Increment turn counter
+        CurrentTurnNumber++;
+    }
+
     UE_LOG(LogTemp, Warning, TEXT("BEFORE SWITCH - Current turn: %s, Phase: %s"),
         bIsPlayerTurn ? TEXT("Human Player") : TEXT("AI Player"),
         CurrentPhase == EGamePhase::SETUP ? TEXT("SETUP") :
         CurrentPhase == EGamePhase::PLAYING ? TEXT("PLAYING") : TEXT("GAMEOVER"));
-
-    // Always toggle the turn flag regardless of phase
-    bIsPlayerTurn = !bIsPlayerTurn;
 
     // Then handle phase transition if needed
     if (CurrentPhase == EGamePhase::SETUP && IsSetupComplete())

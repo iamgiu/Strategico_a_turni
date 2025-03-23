@@ -1,6 +1,5 @@
 // Fill out your copyright notice in the Description page of Project Settings.
 
-
 #pragma once
 
 #include "CoreMinimal.h"
@@ -15,19 +14,20 @@ class ASaT_HumanPlayer;
 UCLASS()
 class STRATEGICO_A_TURNI_API ASaT_PlayerController : public APlayerController
 {
-    GENERATED_BODY()
+	GENERATED_BODY()
 
 public:
 
 	ASaT_PlayerController();
 
-	UPROPERTY(EditAnywhere, Category = Input)
-	UInputMappingContext* SaTContext;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
+	class UInputMappingContext* SaTContext;
 
 
-	UPROPERTY(EditAnywhere, Category = Input)
-	UInputAction* ClickAction;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
+	class UInputAction* ClickAction;
 
+	UFUNCTION(BlueprintCallable, Category = "Input")
 	void ClickOnGrid(const FInputActionValue& Value);
 
 protected:
@@ -41,6 +41,8 @@ protected:
 	void PanCameraY(float Value);
 
 	// Velocità di movimento della camera
-	UPROPERTY(EditAnywhere, Category = "Camera")
-	float CameraPanSpeed = 500.0f;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Camera")
+	float CameraPanSpeed = 1000.0f;
+
+	void DebugInputState();
 };

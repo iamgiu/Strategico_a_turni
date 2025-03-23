@@ -227,36 +227,124 @@ FVector AGridManager::GetWorldLocationFromGrid(int32 GridX, int32 GridY)
 		return FVector(0, 0, 50.0f);
 	}
 
-	// Find the tile at the specified coordinates - DO NOT subtract 1
-	FVector2D GridPosition(GridX, GridY);
-	if (TileMap.Contains(GridPosition))
+	// Adjust for the 2-unit offset (observed from your logs)
+	// The visual coordinates are offset by +2 in both X and Y
+	int32 AdjustedX = GridX;
+	int32 AdjustedY = GridY;
+
+	// Calculate position with adjusted coordinates
+	FVector WorldLocation = GetRelativeLocationByXYPosition(AdjustedX, AdjustedY);
+
+	// Add Z offset to make the unit visible above the tile
+	WorldLocation.Z += 50.0f;
+
+	UE_LOG(LogTemp, Warning, TEXT("World position calculated: X=%f, Y=%f, Z=%f (original coords: %d,%d, adjusted: %d,%d)"),
+		WorldLocation.X, WorldLocation.Y, WorldLocation.Z, GridX, GridY, AdjustedX, AdjustedY);
+
+	return WorldLocation;
+}
+
+void AGridManager::HighlightCell(int32 GridX, int32 GridY, bool bHighlight)
+{
+	// Verify if the position is valid
+	if (!IsValidPosition(FVector2D(GridX, GridY)))
 	{
-		ATile* Tile = TileMap[GridPosition];
-		if (Tile)
+		return;
+	}
+
+	// Get the tile at the specified position
+	ATile* Tile = nullptr;
+	if (TileMap.Contains(FVector2D(GridX, GridY)))
+	{
+		Tile = TileMap[FVector2D(GridX, GridY)];
+	}
+
+	if (Tile)
+	{
+		// Apply highlighting material to the tile
+		if (bHighlight)
 		{
-			// Use the exact position of the tile
-			FVector TileLocation = Tile->GetActorLocation();
-			// Add Z offset to make the unit visible above the tile
-			TileLocation.Z += 50.0f;
+			// Set highlight material - you'll need to create this material in your project
+			if (HighlightMaterial)
+			{
+				Tile->StaticMeshComponent->SetMaterial(0, HighlightMaterial);
+				HighlightedTiles.Add(Tile); // Add to tracked list
+			}
+		}
+		else
+		{
+			// Restore original material
+			Tile->StaticMeshComponent->SetMaterial(0, DefaultTileMaterial);
+			HighlightedTiles.Remove(Tile); // Remove from tracked list
+		}
+	}
+}
 
-			UE_LOG(LogTemp, Warning, TEXT("World position calculated from tile: X=%f, Y=%f, Z=%f"),
-				TileLocation.X, TileLocation.Y, TileLocation.Z);
+void AGridManager::HighlightPath(TArray<FVector2D> PathPoints, bool bClearPrevious)
+{
+	// Clear any existing path only if specified
+	if (bClearPrevious)
+	{
+		ClearPathHighlights();
+	}
 
-			return TileLocation;
+	// Highlight each point in the path
+	for (const FVector2D& Point : PathPoints)
+	{
+		int32 GridX = FMath::FloorToInt(Point.X);
+		int32 GridY = FMath::FloorToInt(Point.Y);
+
+		// Skip invalid positions
+		if (!IsValidPosition(FVector2D(GridX, GridY)))
+			continue;
+
+		// Get the tile at this position
+		if (TileMap.Contains(FVector2D(GridX, GridY)))
+		{
+			ATile* Tile = TileMap[FVector2D(GridX, GridY)];
+			if (Tile)
+			{
+				// Use path material if available, otherwise use highlight material
+				if (PathMaterial)
+				{
+					Tile->StaticMeshComponent->SetMaterial(0, PathMaterial);
+				}
+				else if (HighlightMaterial)
+				{
+					Tile->StaticMeshComponent->SetMaterial(0, HighlightMaterial);
+				}
+				PathTiles.Add(Tile);
+			}
+		}
+	}
+}
+
+void AGridManager::ClearAllHighlights()
+{
+	// Reset all highlighted tiles to their original material
+	for (ATile* Tile : HighlightedTiles)
+	{
+		if (Tile && DefaultTileMaterial)
+		{
+			Tile->StaticMeshComponent->SetMaterial(0, DefaultTileMaterial);
 		}
 	}
 
-	// Fallback to mathematical calculation if the tile doesn't exist
-	FVector WorldLocation = GetRelativeLocationByXYPosition(GridX, GridY);
-	// Add TileSize/2 to get the center of the cell
-	WorldLocation.X += TileSize / 2.0f;
-	WorldLocation.Y += TileSize / 2.0f;
-	WorldLocation.Z += 50.0f;
+	HighlightedTiles.Empty();
+}
 
-	UE_LOG(LogTemp, Warning, TEXT("World position calculated mathematically: X=%f, Y=%f, Z=%f"),
-		WorldLocation.X, WorldLocation.Y, WorldLocation.Z);
+void AGridManager::ClearPathHighlights()
+{
+	// Reset all path-highlighted tiles to their original material
+	for (ATile* Tile : PathTiles)
+	{
+		if (Tile && DefaultTileMaterial)
+		{
+			Tile->StaticMeshComponent->SetMaterial(0, DefaultTileMaterial);
+		}
+	}
 
-	return WorldLocation;
+	PathTiles.Empty();
 }
 
 /*FVector AGridManager::GetWorldLocationFromGrid(int32 GridX, int32 GridY)

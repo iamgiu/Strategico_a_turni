@@ -58,10 +58,6 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Combat")
     virtual bool Attack(AUnit* Target);
 
-protected:
-    // Called when the game starts or when spawned
-    virtual void BeginPlay() override;
-
     // Stats
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stat")
     int32 Movement;
@@ -80,6 +76,10 @@ protected:
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stat")
     int32 Hp;
+
+protected:
+    // Called when the game starts or when spawned
+    virtual void BeginPlay() override;
 
     // Reference to the static mesh component
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")

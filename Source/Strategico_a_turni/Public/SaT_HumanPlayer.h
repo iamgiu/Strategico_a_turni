@@ -49,7 +49,7 @@ public:
     virtual void OnLose() override;
 
     // Gestisce i click del mouse
-    UFUNCTION()
+    UFUNCTION(BlueprintCallable, Category = "Input")
     void OnClick();
 
     // Piazza una nuova unità sulla griglia
@@ -108,6 +108,22 @@ public:
 
     USaT_GameInstance* GameInstance;
 
+    // Currently selected unit
+    UPROPERTY()
+    AUnit* SelectedUnit;
+
+    // Shows the possible movement range for a unit
+    void ShowMovementRange(AUnit* Unit);
+
+    // Try to move a unit to the specified grid location
+    bool TryMoveUnit(AUnit* Unit, int32 TargetGridX, int32 TargetGridY);
+
+    void CalculatePath(int32 StartX, int32 StartY, int32 EndX, int32 EndY);
+    void ClearPath();
+
+    void ClearAllHighlightsAndPaths();
+
+
 protected:
     virtual void BeginPlay() override;
 
@@ -138,4 +154,7 @@ protected:
     // Numero di unità da piazzare
     UPROPERTY(BlueprintReadOnly, Category = "Gameplay")
     int32 UnitsToPlace;
+
+    UPROPERTY()
+    TArray<FVector2D> CurrentPath;
 };
