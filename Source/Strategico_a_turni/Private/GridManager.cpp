@@ -37,7 +37,6 @@ AGridManager::AGridManager()
 	{
 		PathMaterial = PathMatAsset.Object;
 	}
-
 }
 
 void AGridManager::OnConstruction(const FTransform& Transform)
@@ -51,8 +50,26 @@ void AGridManager::OnConstruction(const FTransform& Transform)
 void AGridManager::BeginPlay()
 {
 	Super::BeginPlay();
+
+	// Debug materials before generating field
+	DebugMaterials();
+
+	// Generate the field
 	GenerateField();
 
+	// Verify path material is set
+	if (!PathMaterial)
+	{
+		UE_LOG(LogTemp, Error, TEXT("Path material is not set! Path visualization will not work correctly."));
+
+		// Try to load it from the content browser as a fallback
+		PathMaterial = LoadObject<UMaterial>(nullptr, TEXT("/Game/Materials/M_Path"));
+
+		if (PathMaterial)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("Successfully loaded path material from content browser."));
+		}
+	}
 }
 
 //void AGridManager::ResetField()
@@ -306,41 +323,98 @@ void AGridManager::HighlightCell(int32 GridX, int32 GridY, bool bHighlight)
 
 void AGridManager::HighlightPath(TArray<FVector2D> PathPoints, bool bClearPrevious)
 {
-	// Clear any existing path only if specified
-	if (bClearPrevious)
-	{
-		ClearPathHighlights();
-	}
+    // Clear any existing path only if specified
+    if (bClearPrevious)
+    {
+        ClearPathHighlights();
+    }
 
-	// Highlight each point in the path
-	for (const FVector2D& Point : PathPoints)
-	{
-		int32 GridX = FMath::FloorToInt(Point.X);
-		int32 GridY = FMath::FloorToInt(Point.Y);
+    // Debug info
+    UE_LOG(LogTemp, Warning, TEXT("===== HIGHLIGHT PATH ====="));
+    UE_LOG(LogTemp, Warning, TEXT("Highlighting path with %d points"), PathPoints.Num());
+    UE_LOG(LogTemp, Warning, TEXT("PathMaterial is %s"), PathMaterial ? TEXT("VALID") : TEXT("NULL"));
 
-		// Skip invalid positions
-		if (!IsValidPosition(FVector2D(GridX, GridY)))
-			continue;
+    // Early return if no path points
+    if (PathPoints.Num() == 0)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("No path points to highlight!"));
+        return;
+    }
 
-		// Get the tile at this position
-		if (TileMap.Contains(FVector2D(GridX, GridY)))
-		{
-			ATile* Tile = TileMap[FVector2D(GridX, GridY)];
-			if (Tile)
-			{
-				// Use path material if available, otherwise use highlight material
-				if (PathMaterial)
-				{
-					Tile->StaticMeshComponent->SetMaterial(0, PathMaterial);
-				}
-				else if (HighlightMaterial)
-				{
-					Tile->StaticMeshComponent->SetMaterial(0, HighlightMaterial);
-				}
-				PathTiles.Add(Tile);
-			}
-		}
-	}
+    // Debug: Log all path points
+    for (int32 i = 0; i < PathPoints.Num(); i++)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("Path point %d: (%f, %f)"), 
+            i, PathPoints[i].X, PathPoints[i].Y);
+    }
+
+    // Highlight each point in the path
+    for (int32 i = 0; i < PathPoints.Num(); i++)
+    {
+        const FVector2D& Point = PathPoints[i];
+        int32 GridX = FMath::FloorToInt(Point.X);
+        int32 GridY = FMath::FloorToInt(Point.Y);
+
+        // Skip invalid positions
+        if (!IsValidPosition(FVector2D(GridX, GridY)))
+        {
+            UE_LOG(LogTemp, Warning, TEXT("Invalid position (%d, %d), skipping"), GridX, GridY);
+            continue;
+        }
+
+        // Skip the first point (unit's current position) if it's not the only point
+        if (i == 0 && PathPoints.Num() > 1)
+        {
+            UE_LOG(LogTemp, Warning, TEXT("Skipping first point (%d, %d)"), GridX, GridY);
+            continue;
+        }
+
+        // Get the tile at this position
+        ATile* Tile = nullptr;
+        if (TileMap.Contains(FVector2D(GridX, GridY)))
+        {
+            Tile = TileMap[FVector2D(GridX, GridY)];
+        }
+
+        if (Tile)
+        {
+            // IMPORTANT: Make sure we have a valid path material
+            if (PathMaterial)
+            {
+                UE_LOG(LogTemp, Warning, TEXT("Applying path material to tile at (%d, %d)"), GridX, GridY);
+                Tile->StaticMeshComponent->SetMaterial(0, PathMaterial);
+                PathTiles.Add(Tile);
+            }
+            else if (HighlightMaterial)
+            {
+                UE_LOG(LogTemp, Warning, TEXT("No path material, using highlight material at (%d, %d)"), GridX, GridY);
+                Tile->StaticMeshComponent->SetMaterial(0, HighlightMaterial);
+                PathTiles.Add(Tile);
+            }
+            else
+            {
+                UE_LOG(LogTemp, Error, TEXT("No path or highlight material available!"));
+            }
+        }
+        else
+        {
+            UE_LOG(LogTemp, Warning, TEXT("No tile found at position (%d, %d)"), GridX, GridY);
+        }
+    }
+
+    UE_LOG(LogTemp, Warning, TEXT("Total path tiles highlighted: %d"), PathTiles.Num());
+}
+
+// Add this debug method to help troubleshoot path materials
+void AGridManager::DebugMaterials()
+{
+    UE_LOG(LogTemp, Warning, TEXT("===== DEBUGGING MATERIALS ====="));
+    UE_LOG(LogTemp, Warning, TEXT("DefaultTileMaterial: %s"), 
+        DefaultTileMaterial ? *DefaultTileMaterial->GetName() : TEXT("NULL"));
+    UE_LOG(LogTemp, Warning, TEXT("HighlightMaterial: %s"), 
+        HighlightMaterial ? *HighlightMaterial->GetName() : TEXT("NULL"));
+    UE_LOG(LogTemp, Warning, TEXT("PathMaterial: %s"), 
+        PathMaterial ? *PathMaterial->GetName() : TEXT("NULL"));
 }
 
 void AGridManager::ClearAllHighlights()

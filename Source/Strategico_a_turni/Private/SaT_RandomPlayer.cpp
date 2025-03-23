@@ -1,9 +1,5 @@
 // Fill out your copyright notice in the Description page of Project Settings.
 
-// Fill out your copyright notice in the Description page of Project Settings.
-
-// Fill out your copyright notice in the Description page of Project Settings.
-
 #include "SaT_RandomPlayer.h"
 #include "Kismet/GameplayStatics.h"
 #include "GridManager.h"
@@ -391,6 +387,10 @@ void ASaT_RandomPlayer::ProcessUnitActions(AUnit* Unit)
         return;
     }
 
+    // Debug the unit properties
+    UE_LOG(LogTemp, Warning, TEXT("AI: Processing %s with Movement=%d, RangeAttack=%d, HP=%d"),
+        *Unit->GetName(), Unit->Movement, Unit->RangeAttack, Unit->Hp);
+
     // First, try to find and attack a player unit if in range
     AUnit* PlayerTarget = FindAttackTarget(Unit);
 
@@ -472,9 +472,17 @@ AUnit* ASaT_RandomPlayer::FindAttackTarget(AUnit* AIUnit)
 }
 
 // Move the AI unit toward the closest player unit
+// Move the AI unit toward the closest player unit
 void ASaT_RandomPlayer::MoveTowardPlayerUnit(AUnit* AIUnit)
 {
     if (!AIUnit || !GridManager) return;
+
+    // First, check if unit has already moved this turn
+    if (AIUnit->bHasMovedThisTurn)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("AI: Unit %s has already moved this turn"), *AIUnit->GetName());
+        return;
+    }
 
     // Find closest player unit
     AUnit* ClosestUnit = FindClosestPlayerUnit(AIUnit);
@@ -485,132 +493,209 @@ void ASaT_RandomPlayer::MoveTowardPlayerUnit(AUnit* AIUnit)
         return;
     }
 
-    UE_LOG(LogTemp, Warning, TEXT("AI: Moving toward player unit at (%d,%d)"),
-        ClosestUnit->GridX, ClosestUnit->GridY);
+    UE_LOG(LogTemp, Warning, TEXT("AI: Unit %s with movement range %d attempting to move toward player unit at (%d,%d)"),
+        *AIUnit->GetName(), AIUnit->Movement, ClosestUnit->GridX, ClosestUnit->GridY);
 
-    // Calculate direction toward player unit
-    int32 DirX = (ClosestUnit->GridX > AIUnit->GridX) ? 1 :
-        (ClosestUnit->GridX < AIUnit->GridX) ? -1 : 0;
-    int32 DirY = (ClosestUnit->GridY > AIUnit->GridY) ? 1 :
-        (ClosestUnit->GridY < AIUnit->GridY) ? -1 : 0;
+    // Get the unit's movement range - ensure we're using the correct value
+    int32 MovementRange = AIUnit->Movement;
+    UE_LOG(LogTemp, Warning, TEXT("AI: Unit movement range is %d"), MovementRange);
 
-    // Create a list of possible moves in priority order (prefer moving on both axes if possible)
-    TArray<FVector2D> PossibleMoves;
-
-    // First, try to move diagonally (moving on both X and Y)
-    if (DirX != 0 && DirY != 0)
+    // Store valid move options
+    struct FMoveOption
     {
-        // Priority 1: Move along X axis
-        PossibleMoves.Add(FVector2D(AIUnit->GridX + DirX, AIUnit->GridY));
+        int32 X;
+        int32 Y;
+        int32 DistanceToTarget;
+    };
 
-        // Priority 2: Move along Y axis
-        PossibleMoves.Add(FVector2D(AIUnit->GridX, AIUnit->GridY + DirY));
-    }
-    // If target is directly horizontal
-    else if (DirX != 0)
+    TArray<FMoveOption> ValidMoves;
+
+    // Check all cells within movement range using BFS
+    TArray<bool> Visited;
+    Visited.SetNumZeroed(25 * 25); // For a 25x25 grid
+
+    TQueue<FMoveOption> Queue;
+    Queue.Enqueue(FMoveOption{ AIUnit->GridX, AIUnit->GridY, 0 });
+    Visited[AIUnit->GridY * 25 + AIUnit->GridX] = true;
+
+    // Direction vectors for the four cardinal directions
+    int32 dx[] = { 1, -1, 0, 0 };
+    int32 dy[] = { 0, 0, 1, -1 };
+
+    while (!Queue.IsEmpty())
     {
-        PossibleMoves.Add(FVector2D(AIUnit->GridX + DirX, AIUnit->GridY));
-        // Add some randomness to Y movement if X is the main direction
-        PossibleMoves.Add(FVector2D(AIUnit->GridX + DirX, AIUnit->GridY + 1));
-        PossibleMoves.Add(FVector2D(AIUnit->GridX + DirX, AIUnit->GridY - 1));
-    }
-    // If target is directly vertical
-    else if (DirY != 0)
-    {
-        PossibleMoves.Add(FVector2D(AIUnit->GridX, AIUnit->GridY + DirY));
-        // Add some randomness to X movement if Y is the main direction
-        PossibleMoves.Add(FVector2D(AIUnit->GridX + 1, AIUnit->GridY + DirY));
-        PossibleMoves.Add(FVector2D(AIUnit->GridX - 1, AIUnit->GridY + DirY));
-    }
+        FMoveOption Current;
+        Queue.Dequeue(Current);
 
-    // Try each possible move until we find a valid one
-    for (const FVector2D& Move : PossibleMoves)
-    {
-        int32 NewX = FMath::Clamp(Move.X, 0, 24);  // Clamp to grid boundaries
-        int32 NewY = FMath::Clamp(Move.Y, 0, 24);
-
-        // Calculate distance from current position
-        int32 MoveDistance = FMath::Abs(NewX - AIUnit->GridX) + FMath::Abs(NewY - AIUnit->GridY);
-
-        // Check if move is valid (within movement range and not occupied)
-        if (MoveDistance <= AIUnit->Movement && !GridManager->IsCellOccupied(NewX, NewY))
+        // Skip the starting position
+        if (Current.X != AIUnit->GridX || Current.Y != AIUnit->GridY)
         {
-            // Visual feedback - highlight path
+            // Calculate distance to target from this position
+            int32 DistToTarget = FMath::Abs(Current.X - ClosestUnit->GridX) +
+                FMath::Abs(Current.Y - ClosestUnit->GridY);
+
+            // Add this position as a valid move
+            Current.DistanceToTarget = DistToTarget;
+            ValidMoves.Add(Current);
+        }
+
+        // Don't explore further if we've used all movement
+        if (Current.DistanceToTarget >= MovementRange)
+            continue;
+
+        // Try all four directions
+        for (int32 i = 0; i < 4; i++)
+        {
+            int32 NewX = Current.X + dx[i];
+            int32 NewY = Current.Y + dy[i];
+
+            // Check if new position is valid and not visited
+            if (NewX >= 0 && NewX < 25 && NewY >= 0 && NewY < 25 &&
+                !Visited[NewY * 25 + NewX] && !GridManager->IsCellOccupied(NewX, NewY))
+            {
+                Visited[NewY * 25 + NewX] = true;
+                Queue.Enqueue(FMoveOption{ NewX, NewY, Current.DistanceToTarget + 1 });
+            }
+        }
+    }
+
+    // Display all valid moves (for debugging)
+    UE_LOG(LogTemp, Warning, TEXT("AI: Found %d valid moves within range %d"), ValidMoves.Num(), MovementRange);
+
+    // Find the best move - closest to the target unit
+    FMoveOption BestMove{ AIUnit->GridX, AIUnit->GridY, INT_MAX };
+    bool bFoundMove = false;
+
+    for (const FMoveOption& Move : ValidMoves)
+    {
+        // Skip the starting position
+        if (Move.X == AIUnit->GridX && Move.Y == AIUnit->GridY)
+            continue;
+
+        // Calculate distance from this position to the target
+        int32 DistToTarget = FMath::Abs(Move.X - ClosestUnit->GridX) +
+            FMath::Abs(Move.Y - ClosestUnit->GridY);
+
+        // Check if this move gets us closer to the target
+        if (DistToTarget < BestMove.DistanceToTarget)
+        {
+            BestMove = Move;
+            bFoundMove = true;
+        }
+    }
+
+    // If we found a valid move, execute it
+    if (bFoundMove)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("AI: Best move found at (%d,%d), distance to target: %d"),
+            BestMove.X, BestMove.Y, BestMove.DistanceToTarget);
+
+        // Create a detailed path for visualization
+        TArray<FVector2D> Path;
+
+        // Always add the starting position
+        Path.Add(FVector2D(AIUnit->GridX, AIUnit->GridY));
+
+        // Initialize current position trackers
+        int32 CurrentX = AIUnit->GridX;
+        int32 CurrentY = AIUnit->GridY;
+
+        // Create a path from start to destination, showing each step
+        // First move horizontally to align X coordinate
+        while (CurrentX != BestMove.X)
+        {
+            // Move one cell at a time in the right direction
+            CurrentX += (CurrentX < BestMove.X) ? 1 : -1;
+
+            // Skip adding this point if it's occupied (except for destination)
+            if (!GridManager->IsCellOccupied(CurrentX, CurrentY) ||
+                (CurrentX == BestMove.X && CurrentY == BestMove.Y))
+            {
+                Path.Add(FVector2D(CurrentX, CurrentY));
+            }
+        }
+
+        // Then move vertically to align Y coordinate
+        while (CurrentY != BestMove.Y)
+        {
+            // Move one cell at a time in the right direction
+            CurrentY += (CurrentY < BestMove.Y) ? 1 : -1;
+
+            // Skip adding this point if it's occupied (except for destination)
+            if (!GridManager->IsCellOccupied(CurrentX, CurrentY) ||
+                (CurrentX == BestMove.X && CurrentY == BestMove.Y))
+            {
+                Path.Add(FVector2D(CurrentX, CurrentY));
+            }
+        }
+
+        // Visualize the complete path
+        if (GridManager && Path.Num() > 1)
+        {
+            UE_LOG(LogTemp, Warning, TEXT("AI: Visualizing path with %d points"), Path.Num());
+
+            // Highlight the path
+            GridManager->HighlightPath(Path, true);
+
+            // Schedule to clear the path highlight after a delay
+            FTimerHandle ClearPathHandle;
+            GetWorld()->GetTimerManager().SetTimer(ClearPathHandle, [this]() {
+                if (GridManager)
+                {
+                    GridManager->ClearPathHighlights();
+                }
+                }, 2.0f, false); // Show the path for 2 seconds for better visibility
+        }
+
+        // Free the current cell before moving
+        GridManager->OccupyCell(AIUnit->GridX, AIUnit->GridY, nullptr);
+
+        // Move the unit
+        UE_LOG(LogTemp, Warning, TEXT("AI: Moving unit from (%d,%d) to (%d,%d)"),
+            AIUnit->GridX, AIUnit->GridY, BestMove.X, BestMove.Y);
+
+        // Update the grid position
+        FVector NewLocation = GridManager->GetWorldLocationFromGrid(BestMove.X, BestMove.Y);
+        AIUnit->GridX = BestMove.X;
+        AIUnit->GridY = BestMove.Y;
+        AIUnit->SetActorLocation(NewLocation);
+
+        // Mark the unit as moved
+        AIUnit->bHasMovedThisTurn = true;
+
+        // Mark new cell as occupied
+        GridManager->OccupyCell(BestMove.X, BestMove.Y, AIUnit);
+
+        // After moving, check if we can now attack
+        AUnit* NewTarget = FindAttackTarget(AIUnit);
+        if (NewTarget)
+        {
+            UE_LOG(LogTemp, Warning, TEXT("AI: After moving, now attacking player unit at (%d,%d)"),
+                NewTarget->GridX, NewTarget->GridY);
+
+            // Visual indication of target
             if (GridManager)
             {
-                TArray<FVector2D> Path;
-                Path.Add(FVector2D(AIUnit->GridX, AIUnit->GridY));
-                Path.Add(FVector2D(NewX, NewY));
-                GridManager->HighlightPath(Path, true);
+                GridManager->HighlightCell(NewTarget->GridX, NewTarget->GridY, true);
 
-                // Schedule to clear the path highlight
-                FTimerHandle ClearPathHandle;
-                GetWorld()->GetTimerManager().SetTimer(ClearPathHandle, [this]() {
-                    if (GridManager)
+                // Schedule to clear the highlight
+                FTimerHandle ClearHighlightHandle;
+                GetWorld()->GetTimerManager().SetTimer(ClearHighlightHandle, [this, NewTarget]() {
+                    if (GridManager && NewTarget)
                     {
-                        GridManager->ClearPathHighlights();
+                        GridManager->HighlightCell(NewTarget->GridX, NewTarget->GridY, false);
                     }
                     }, 1.0f, false);
             }
 
-            // Move the unit
-            UE_LOG(LogTemp, Warning, TEXT("AI: Moving unit from (%d,%d) to (%d,%d)"),
-                AIUnit->GridX, AIUnit->GridY, NewX, NewY);
-
-            // Update the grid manager about the move
-            if (GridManager)
-            {
-                // Mark old cell as unoccupied
-                // Note: You might need to add a method to GridManager to handle this
-                // For now, we'll just mark the new cell as occupied
-
-                // Execute the move
-                bool bSuccess = AIUnit->Move(NewX, NewY);
-
-                if (bSuccess)
-                {
-                    // Mark new cell as occupied
-                    GridManager->OccupyCell(NewX, NewY, AIUnit);
-                    UE_LOG(LogTemp, Warning, TEXT("AI: Successfully moved unit"));
-
-                    // After moving, check if we can now attack
-                    AUnit* NewTarget = FindAttackTarget(AIUnit);
-                    if (NewTarget)
-                    {
-                        UE_LOG(LogTemp, Warning, TEXT("AI: After moving, now attacking player unit at (%d,%d)"),
-                            NewTarget->GridX, NewTarget->GridY);
-
-                        // Visual indication of target
-                        if (GridManager)
-                        {
-                            GridManager->HighlightCell(NewTarget->GridX, NewTarget->GridY, true);
-
-                            // Schedule to clear the highlight
-                            FTimerHandle ClearHighlightHandle;
-                            GetWorld()->GetTimerManager().SetTimer(ClearHighlightHandle, [this, NewTarget]() {
-                                if (GridManager && NewTarget)
-                                {
-                                    GridManager->HighlightCell(NewTarget->GridX, NewTarget->GridY, false);
-                                }
-                                }, 1.0f, false);
-                        }
-
-                        // Perform the attack
-                        AIUnit->Attack(NewTarget);
-                    }
-                }
-                else
-                {
-                    UE_LOG(LogTemp, Warning, TEXT("AI: Failed to move unit"));
-                }
-            }
-
-            // We found and executed a valid move, so exit
-            return;
+            // Perform the attack
+            AIUnit->Attack(NewTarget);
         }
     }
-
-    UE_LOG(LogTemp, Warning, TEXT("AI: Could not find a valid move for unit"));
+    else
+    {
+        UE_LOG(LogTemp, Warning, TEXT("AI: Could not find a valid move for unit"));
+    }
 }
 
 // Find the closest player unit to the given AI unit

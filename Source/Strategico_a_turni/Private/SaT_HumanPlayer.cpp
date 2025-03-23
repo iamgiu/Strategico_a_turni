@@ -527,6 +527,17 @@ void ASaT_HumanPlayer::HandlePlayingPhaseClick(ATile* ClickedTile)
     // Check if there's a unit on this tile
     AUnit* ClickedUnit = ClickedTile->OccupyingUnit;
 
+    // If we're clicking on empty tile and we're not in move or attack mode,
+    // deselect the current unit if there is one
+    if (!ClickedUnit && !bMoveMode && !bAttackMode && SelectedUnit)
+    {
+        // Deselect the current unit
+        SelectedUnit->UnshowSelected();
+        SelectedUnit = nullptr;
+        ClearAllHighlightsAndPaths();
+        return;
+    }
+
     // If we found a unit on the tile
     if (ClickedUnit)
     {
@@ -657,11 +668,44 @@ void ASaT_HumanPlayer::HandlePlayingPhaseClick(ATile* ClickedTile)
             else
             {
                 UE_LOG(LogTemp, Warning, TEXT("Target cell is not in movement range"));
+
+                // If clicked outside movement range, cancel move mode
+                bMoveMode = false;
+                ClearAllHighlightsAndPaths();
             }
+        }
+        else if (bAttackMode && SelectedUnit)
+        {
+            // If clicked empty space while in attack mode, cancel attack mode
+            bAttackMode = false;
+            ClearAllHighlightsAndPaths();
+            UE_LOG(LogTemp, Warning, TEXT("Attack mode canceled"));
         }
         else
         {
             UE_LOG(LogTemp, Warning, TEXT("Clicked on empty cell but not in move mode or no unit selected"));
+        }
+    }
+}
+
+void ASaT_HumanPlayer::DeselectCurrentUnit()
+{
+    if (SelectedUnit)
+    {
+        SelectedUnit->UnshowSelected();
+        SelectedUnit = nullptr;
+
+        // Cancel any modes
+        bMoveMode = false;
+        bAttackMode = false;
+
+        // Clear UI elements
+        ClearAllHighlightsAndPaths();
+
+        if (MovementAndAttackWidget)
+        {
+            MovementAndAttackWidget->RemoveFromParent();
+            MovementAndAttackWidget = nullptr;
         }
     }
 }
@@ -836,6 +880,7 @@ void ASaT_HumanPlayer::EndTurn()
 {
     UE_LOG(LogTemp, Warning, TEXT("Human Player ending turn"));
 
+    DeselectCurrentUnit();
     ClearAllHighlightsAndPaths();
 
     // Get the game instance to pass turn
@@ -1051,44 +1096,118 @@ void ASaT_HumanPlayer::CalculatePath(int32 StartX, int32 StartY, int32 EndX, int
     // Clear existing path array
     CurrentPath.Empty();
 
+    // Ensure GridManager is valid
+    if (!GridManager)
+    {
+        UE_LOG(LogTemp, Error, TEXT("GridManager is NULL in CalculatePath!"));
+        return;
+    }
+
+    UE_LOG(LogTemp, Warning, TEXT("Calculating path from (%d,%d) to (%d,%d)"),
+        StartX, StartY, EndX, EndY);
+
     // Always start with the source position
     CurrentPath.Add(FVector2D(StartX, StartY));
 
-    // Calculate Manhattan path (this will always move horizontally first, then vertically)
-    // You could modify this to choose different path strategies
+    // BFS approach to find the shortest path avoiding obstacles
+    TArray<FVector2D> CameFrom;
+    CameFrom.SetNumZeroed(25 * 25); // For a 25x25 grid, using 1D array
+    TArray<bool> Visited;
+    Visited.SetNumZeroed(25 * 25);
 
-    int32 CurrentX = StartX;
-    int32 CurrentY = StartY;
+    // Direction vectors for the four cardinal directions
+    int32 dx[] = { 1, -1, 0, 0 };
+    int32 dy[] = { 0, 0, 1, -1 };
 
-    // Move horizontally first to align X-coordinate
-    while (CurrentX != EndX)
+    TQueue<FVector2D> Queue;
+    Queue.Enqueue(FVector2D(StartX, StartY));
+    Visited[StartY * 25 + StartX] = true;
+
+    bool bFoundPath = false;
+
+    while (!Queue.IsEmpty() && !bFoundPath)
     {
-        CurrentX += (CurrentX < EndX) ? 1 : -1;
+        FVector2D Current;
+        Queue.Dequeue(Current);
 
-        // Skip if cell is occupied (except for the destination)
-        if (GridManager->IsCellOccupied(CurrentX, CurrentY) && (CurrentX != EndX || CurrentY != EndY))
-            continue;
+        // Check if we reached the destination
+        if (FMath::FloorToInt(Current.X) == EndX && FMath::FloorToInt(Current.Y) == EndY)
+        {
+            bFoundPath = true;
+            break;
+        }
 
-        CurrentPath.Add(FVector2D(CurrentX, CurrentY));
+        // Try all four directions
+        for (int32 i = 0; i < 4; i++)
+        {
+            int32 NewX = FMath::FloorToInt(Current.X) + dx[i];
+            int32 NewY = FMath::FloorToInt(Current.Y) + dy[i];
+
+            // Check if new position is valid and not visited
+            if (GridManager->IsValidPosition(FVector2D(NewX, NewY)) && !Visited[NewY * 25 + NewX])
+            {
+                // Check if the cell is not occupied (except for the destination)
+                bool bIsCellFree = !GridManager->IsCellOccupied(NewX, NewY) ||
+                    (NewX == EndX && NewY == EndY);
+
+                if (bIsCellFree)
+                {
+                    // Mark as visited
+                    Visited[NewY * 25 + NewX] = true;
+
+                    // Record where we came from
+                    CameFrom[NewY * 25 + NewX] = Current;
+
+                    // Add to queue
+                    Queue.Enqueue(FVector2D(NewX, NewY));
+                }
+            }
+        }
     }
 
-    // Then move vertically to align Y-coordinate
-    while (CurrentY != EndY)
+    // If we found a path, reconstruct it
+    if (bFoundPath)
     {
-        CurrentY += (CurrentY < EndY) ? 1 : -1;
+        // Clear the current path and add the destination
+        CurrentPath.Empty();
 
-        // Skip if cell is occupied (except for the destination)
-        if (GridManager->IsCellOccupied(CurrentX, CurrentY) && (CurrentX != EndX || CurrentY != EndY))
-            continue;
+        // Start from the destination
+        FVector2D Current(EndX, EndY);
 
-        CurrentPath.Add(FVector2D(CurrentX, CurrentY));
+        // Build the path backwards
+        TArray<FVector2D> ReversePath;
+        ReversePath.Add(Current);
+
+        // Keep going until we reach the start
+        while (Current.X != StartX || Current.Y != StartY)
+        {
+            Current = CameFrom[FMath::FloorToInt(Current.Y) * 25 + FMath::FloorToInt(Current.X)];
+            ReversePath.Add(Current);
+        }
+
+        // Reverse the path to get the correct order
+        for (int32 i = ReversePath.Num() - 1; i >= 0; i--)
+        {
+            CurrentPath.Add(ReversePath[i]);
+        }
+
+        UE_LOG(LogTemp, Warning, TEXT("Found path with %d steps"), CurrentPath.Num());
+    }
+    else
+    {
+        // Fallback to simple direct path if no valid path found
+        UE_LOG(LogTemp, Warning, TEXT("No valid path found, using direct path"));
+
+        CurrentPath.Empty();
+        CurrentPath.Add(FVector2D(StartX, StartY));
+        CurrentPath.Add(FVector2D(EndX, EndY));
     }
 
-    // Display the path WITHOUT clearing previous path
+    // Display the path
     if (GridManager)
     {
-        // Pass false to prevent clearing previous path
-        GridManager->HighlightPath(CurrentPath, false);
+        // Use true to clear any existing path highlights
+        GridManager->HighlightPath(CurrentPath, true);
     }
 }
 
@@ -1408,4 +1527,3 @@ void ASaT_HumanPlayer::OnAttackButtonClicked()
         MovementAndAttackWidget = nullptr;
     }
 }
-

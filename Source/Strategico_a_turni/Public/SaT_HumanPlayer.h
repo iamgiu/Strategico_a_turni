@@ -167,6 +167,9 @@ public:
     // Helper method to handle clicks during the playing phase
     void HandlePlayingPhaseClick(ATile* ClickedTile);
 
+    UFUNCTION(BlueprintCallable, Category = "Unit Selection")
+    void DeselectCurrentUnit();
+
 protected:
     virtual void BeginPlay() override;
 

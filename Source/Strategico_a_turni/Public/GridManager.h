@@ -126,6 +126,8 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
 	UStaticMeshComponent* StaticMeshComponent;
 
+	void DebugMaterials();
+
 	//public:	
 	//	// Called every frame
 	//	virtual void Tick(float DeltaTime) override;
