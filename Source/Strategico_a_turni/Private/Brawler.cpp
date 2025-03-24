@@ -12,6 +12,8 @@ ABrawler::ABrawler()
     RangeAttack = 1;
     MinDamage = 1;
     MaxDamage = 6;
+
+    UnitTypeDisplayName = TEXT("Brawler");
 }
 
 void ABrawler::BeginPlay()

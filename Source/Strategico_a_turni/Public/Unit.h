@@ -83,6 +83,9 @@ public:
     UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "Gameplay")
     bool bHasMovedThisTurn;
 
+    UPROPERTY(BlueprintReadOnly, Category = "Unit Info")
+    FString UnitTypeDisplayName;
+
 protected:
     // Called when the game starts or when spawned
     virtual void BeginPlay() override;

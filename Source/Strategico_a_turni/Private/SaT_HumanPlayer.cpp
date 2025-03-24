@@ -411,6 +411,21 @@ void ASaT_HumanPlayer::PlaceUnit(int32 GridX, int32 GridY, bool bIsSniper)
         {
             GameInstance->HumanUnitsPlaced = PlacedUnitsCount;
         }
+
+        AGameModeBase* GameModeBase = UGameplayStatics::GetGameMode(GetWorld());
+        ASaT_GameMode* GameMode = Cast<ASaT_GameMode>(GameModeBase);
+        if (GameMode)
+        {
+            GameMode->UpdateGameHUD();
+            FString UnitType = bIsSniper ? TEXT("Sniper") : TEXT("Brawler");
+            GameMode->AddFormattedMoveToLog(
+                true, // IsPlayerUnit
+                UnitType,
+                TEXT("Place"),
+                FVector2D(0, 0), // No from position for placement
+                FVector2D(GridX, GridY)
+            );
+        }
     }
 }
 
@@ -528,6 +543,13 @@ void ASaT_HumanPlayer::HandlePlayingPhaseClick(ATile* ClickedTile)
     {
         // Deselect the current unit
         SelectedUnit->UnshowSelected();
+
+        ASaT_GameMode* GameMode = Cast<ASaT_GameMode>(GetWorld()->GetAuthGameMode());
+        if (GameMode)
+        {
+            GameMode->SetSelectedUnit(nullptr);
+        }
+
         SelectedUnit = nullptr;
         ClearAllHighlightsAndPaths();
         return;
@@ -569,6 +591,12 @@ void ASaT_HumanPlayer::HandlePlayingPhaseClick(ATile* ClickedTile)
                 SelectedUnit->ShowSelected();
                 UE_LOG(LogTemp, Warning, TEXT("Selected unit at %d,%d"),
                     SelectedUnit->GridX, SelectedUnit->GridY);
+
+                ASaT_GameMode* GameMode = Cast<ASaT_GameMode>(GetWorld()->GetAuthGameMode());
+                if (GameMode)
+                {
+                    GameMode->SetSelectedUnit(SelectedUnit);
+                }
 
                 // Show the action widget
                 ShowMovementAndAttackWidget(SelectedUnit);
@@ -650,6 +678,22 @@ void ASaT_HumanPlayer::HandlePlayingPhaseClick(ATile* ClickedTile)
                     // Mark as moved
                     UnitToMove->bHasMovedThisTurn = true;
 
+                    ASaT_GameMode* GameMode = Cast<ASaT_GameMode>(GetWorld()->GetAuthGameMode());
+                    if (GameMode)
+                    {
+                        GameMode->UpdateGameHUD();
+
+                        FString UnitType = Cast<ASniper>(UnitToMove) ? TEXT("Sniper") : TEXT("Brawler");
+                        GameMode->AddFormattedMoveToLog(
+                            true, // IsPlayerUnit
+                            UnitType,
+                            TEXT("Move"),
+                            FVector2D(CurrentPath[0].X, CurrentPath[0].Y), // Use first position in path as starting point
+                            FVector2D(ClickedTile->GridX, ClickedTile->GridY)
+                        );
+
+                    }
+
                     UE_LOG(LogTemp, Warning, TEXT("Move successful!"));
 
                     // Reset move mode
@@ -688,6 +732,13 @@ void ASaT_HumanPlayer::DeselectCurrentUnit()
     if (SelectedUnit)
     {
         SelectedUnit->UnshowSelected();
+
+        ASaT_GameMode* GameMode = Cast<ASaT_GameMode>(GetWorld()->GetAuthGameMode());
+        if (GameMode)
+        {
+            GameMode->SetSelectedUnit(nullptr);
+        }
+
         SelectedUnit = nullptr;
 
         // Cancel any modes
@@ -1334,33 +1385,33 @@ bool ASaT_HumanPlayer::TryAttackUnit(AUnit* AttackingUnit, AUnit* TargetUnit)
     // Check if target is in range
     if (Distance <= AttackingUnit->RangeAttack)
     {
-        // Perform the attack using the Unit's Attack method
+        // Save the target's health before attack for damage calculation
+        int32 TargetHpBefore = TargetUnit->Hp;
+
+        // Perform the attack
         bool bAttackSuccess = AttackingUnit->Attack(TargetUnit);
 
         if (bAttackSuccess)
         {
-            // Mark the unit as having attacked this turn
-            UnitAttackedThisTurn.Add(AttackingUnit, true);
+            // Calculate damage dealt
+            int32 DamageDealt = TargetHpBefore - TargetUnit->Hp;
 
-            UE_LOG(LogTemp, Warning, TEXT("Attack successful! Target HP: %d"), TargetUnit->Hp);
-
-            // If target is now dead, handle it
-            if (!TargetUnit->IsAlive())
+            // Update GameHUD and log
+            ASaT_GameMode* GameMode = Cast<ASaT_GameMode>(GetWorld()->GetAuthGameMode());
+            if (GameMode)
             {
-                UE_LOG(LogTemp, Warning, TEXT("Target was killed by the attack!"));
+                GameMode->UpdateGameHUD();
 
-                // Make sure the cell is marked as unoccupied
-                GridManager->OccupyCell(TargetX, TargetY, nullptr);
-
-                // Update the HUD
-                AGameModeBase* GameModeBase = UGameplayStatics::GetGameMode(GetWorld());
-                ASaT_GameMode* GameMode = Cast<ASaT_GameMode>(GameModeBase);
-                if (GameMode)
-                {
-                    GameMode->UpdateGameHUD();
-                }
+                FString AttackerType = Cast<ASniper>(AttackingUnit) ? TEXT("Sniper") : TEXT("Brawler");
+                GameMode->AddFormattedMoveToLog(
+                    true, // IsPlayerUnit
+                    AttackerType,
+                    TEXT("Attack"),
+                    FVector2D(AttackingUnit->GridX, AttackingUnit->GridY),
+                    FVector2D(TargetUnit->GridX, TargetUnit->GridY),
+                    DamageDealt
+                );
             }
-
             return true;
         }
     }
@@ -1368,7 +1419,7 @@ bool ASaT_HumanPlayer::TryAttackUnit(AUnit* AttackingUnit, AUnit* TargetUnit)
     {
         UE_LOG(LogTemp, Warning, TEXT("Target is out of attack range!"));
     }
-
+    
     return false;
 }
 

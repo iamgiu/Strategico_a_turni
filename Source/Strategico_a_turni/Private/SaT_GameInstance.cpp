@@ -126,6 +126,7 @@ void USaT_GameInstance::SetGamePhase(EGamePhase NewPhase)
 
         UE_LOG(LogTemp, Display, TEXT("Game phase changed to: %s"), *PhaseStr);
     }
+
 }
 
 EGamePhase USaT_GameInstance::GetGamePhase() const

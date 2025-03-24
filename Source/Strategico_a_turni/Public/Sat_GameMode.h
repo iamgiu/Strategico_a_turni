@@ -126,6 +126,45 @@ public:
     UFUNCTION(BlueprintCallable, Category = "UI")
     FText GetTurnText() const { return FText::FromString(TurnText); }
 
+    UFUNCTION(BlueprintCallable, Category = "UI")
+    FString GetSelectedUnitInfoText() const;
+
+    AUnit* CurrentlySelectedUnit;
+
+    UFUNCTION(BlueprintCallable, Category = "Game")
+    void SetSelectedUnit(AUnit* Unit);
+
+    // Maximum number of log entries to keep
+    UPROPERTY(EditDefaultsOnly, Category = "Game Log")
+    int32 MaxGameLogEntries = 50;
+
+    // Game log array for storing entries
+    UPROPERTY(BlueprintReadOnly, Category = "Game Log")
+    TArray<FString> GameLog;
+
+    UPROPERTY(BlueprintReadOnly, Category = "Game Log")
+    FString FormattedEntry;
+
+    UPROPERTY(BlueprintReadOnly, Category = "Game Log")
+    TArray<FString> RawMoveHistory;
+
+    /**
+     * Add a formatted move entry to the game log history
+     *
+     * @param bIsPlayerUnit Whether the unit belongs to the human player (true) or AI (false)
+     * @param UnitType The type of unit making the move ("Sniper" or "Brawler")
+     * @param ActionType The type of action ("Move", "Attack", "Skip", "Place")
+     * @param FromPosition The starting position for a move, or the attacker position for an attack
+     * @param ToPosition The destination position for a move, or the target position for an attack
+     * @param Damage The amount of damage dealt in an attack (0 for non-attack actions)
+    */
+    UFUNCTION(BlueprintCallable, Category = "Game Log")
+    void AddFormattedMoveToLog(bool bIsPlayerUnit, const FString& UnitType, const FString& ActionType,
+        const FVector2D& FromPosition, const FVector2D& ToPosition, int32 Damage = 0);
+
+    // Get the formatted move history as a string
+    UFUNCTION(BlueprintCallable, Category = "Game Log")
+    FString GetFormattedGameLog() const;
 
 protected:
 

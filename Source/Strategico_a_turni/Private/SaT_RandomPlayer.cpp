@@ -279,6 +279,22 @@ void ASaT_RandomPlayer::PlaceRandomUnit()
                     GameInstance->AIUnitsPlaced = PlacedUnitsCount;
                     UE_LOG(LogTemp, Warning, TEXT("Updated GameInstance AIUnitsPlaced = %d"), GameInstance->AIUnitsPlaced);
                 }
+
+                AGameModeBase* GameModeBase = UGameplayStatics::GetGameMode(GetWorld());
+                ASaT_GameMode* GameMode = Cast<ASaT_GameMode>(GameModeBase);
+                if (GameMode)
+                {
+                    GameMode->UpdateGameHUD();
+                    // Use the new formatted logging method
+                    FString UnitType = bIsSniper ? TEXT("Sniper") : TEXT("Brawler");
+                    GameMode->AddFormattedMoveToLog(
+                        false, // IsAIUnit
+                        UnitType,
+                        TEXT("Place"),
+                        FVector2D(0, 0), // No from position for placement
+                        FVector2D(GridX, GridY)
+                    );
+                }
             }
 
             // Always end turn after placing one unit
@@ -418,6 +434,30 @@ void ASaT_RandomPlayer::ProcessUnitActions(AUnit* Unit)
 
         // Perform the attack
         Unit->Attack(PlayerTarget);
+
+        AGameModeBase* GameModeBase = UGameplayStatics::GetGameMode(GetWorld());
+        ASaT_GameMode* GameMode = Cast<ASaT_GameMode>(GameModeBase);
+        if (GameMode)
+        {
+            GameMode->UpdateGameHUD();
+
+            FString AttackerType = Cast<ASniper>(Unit) ? TEXT("Sniper") : TEXT("Brawler");
+            int32 TargetHpBefore = PlayerTarget->Hp;
+
+            Unit->Attack(PlayerTarget);
+
+            // Calculate damage dealt
+            int32 DamageDealt = TargetHpBefore - PlayerTarget->Hp;
+
+            GameMode->AddFormattedMoveToLog(
+                false, // IsPlayerUnit = false for AI units
+                AttackerType,
+                TEXT("Attack"),
+                FVector2D(Unit->GridX, Unit->GridY),
+                FVector2D(PlayerTarget->GridX, PlayerTarget->GridY),
+                DamageDealt
+            );
+        }
     }
     // If no valid attack target, try to move toward a player unit
     else if (!Unit->bHasMovedThisTurn)
@@ -471,7 +511,6 @@ AUnit* ASaT_RandomPlayer::FindAttackTarget(AUnit* AIUnit)
     return nullptr;
 }
 
-// Move the AI unit toward the closest player unit
 // Move the AI unit toward the closest player unit
 void ASaT_RandomPlayer::MoveTowardPlayerUnit(AUnit* AIUnit)
 {
@@ -665,6 +704,20 @@ void ASaT_RandomPlayer::MoveTowardPlayerUnit(AUnit* AIUnit)
 
         // Mark new cell as occupied
         GridManager->OccupyCell(BestMove.X, BestMove.Y, AIUnit);
+
+        AGameModeBase* GameModeBase = UGameplayStatics::GetGameMode(GetWorld());
+        ASaT_GameMode* GameMode = Cast<ASaT_GameMode>(GameModeBase);
+        if (GameMode)
+        {
+            FString UnitType = Cast<ASniper>(AIUnit) ? TEXT("Sniper") : TEXT("Brawler");
+            GameMode->AddFormattedMoveToLog(
+                false, // IsPlayerUnit = false for AI units
+                UnitType,
+                TEXT("Move"),
+                FVector2D(Path[0].X, Path[0].Y), // Starting position
+                FVector2D(BestMove.X, BestMove.Y) // Destination position
+            );
+        }
 
         // After moving, check if we can now attack
         AUnit* NewTarget = FindAttackTarget(AIUnit);

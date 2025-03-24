@@ -554,26 +554,26 @@ void ASaT_GameMode::UpdateGameHUD()
     TArray<AActor*> AllUnits;
     UGameplayStatics::GetAllActorsOfClass(GetWorld(), AUnit::StaticClass(), AllUnits);
 
-    // Initialize positions with placeholders
-    PlayerSniperPos = TEXT("(--,--)");
-    PlayerBrawlerPos = TEXT("(--,--)");
-    AISniperPos = TEXT("(--,--)");
-    AIBrawlerPos = TEXT("(--,--)");
-
-    // Set default HP values (based on unit definitions)
+    // Initialize default values
     PlayerSniperHP = 0;
     PlayerBrawlerHP = 0;
     AISniperHP = 0;
     AIBrawlerHP = 0;
 
+    PlayerSniperPos = TEXT("(--,--)");
+    PlayerBrawlerPos = TEXT("(--,--)");
+    AISniperPos = TEXT("(--,--)");
+    AIBrawlerPos = TEXT("(--,--)");
+
+    // Update unit information
     for (AActor* UnitActor : AllUnits)
     {
         AUnit* Unit = Cast<AUnit>(UnitActor);
-        if (Unit)
+        if (Unit && Unit->IsAlive())
         {
             if (Unit->bIsPlayerUnit)
             {
-                // Check unit type
+                // Player units
                 if (Cast<ASniper>(Unit))
                 {
                     // Update player sniper info
@@ -606,6 +606,12 @@ void ASaT_GameMode::UpdateGameHUD()
         }
     }
 
+    // Format HP values for display
+    PlayerSniperHPFormatted = FString::Printf(TEXT("HP: %d/20"), PlayerSniperHP);
+    PlayerBrawlerHPFormatted = FString::Printf(TEXT("HP: %d/40"), PlayerBrawlerHP);
+    AISniperHPFormatted = FString::Printf(TEXT("HP: %d/20"), AISniperHP);
+    AIBrawlerHPFormatted = FString::Printf(TEXT("HP: %d/40"), AIBrawlerHP);
+
     // Update turn info
     USaT_GameInstance* GameInstance = Cast<USaT_GameInstance>(UGameplayStatics::GetGameInstance(GetWorld()));
     if (GameInstance)
@@ -614,6 +620,202 @@ void ASaT_GameMode::UpdateGameHUD()
         IsPlayerTurn = GameInstance->bIsPlayerTurn;
         // Get the current turn number
         CurrentTurnNumber = GameInstance->CurrentTurnNumber;
+
+        // Update turn text
+        if (GameInstance->GetGamePhase() == EGamePhase::SETUP)
+        {
+            TurnText = IsPlayerTurn
+                ? FString::Printf(TEXT("SETUP PHASE: PLAYER TURN %d"), CurrentTurnNumber)
+                : FString::Printf(TEXT("SETUP PHASE: AI TURN %d"), CurrentTurnNumber);
+        }
+        else if (GameInstance->GetGamePhase() == EGamePhase::PLAYING)
+        {
+            TurnText = IsPlayerTurn
+                ? FString::Printf(TEXT("PLAYING PHASE: PLAYER TURN %d"), CurrentTurnNumber)
+                : FString::Printf(TEXT("PLAYING PHASE: AI TURN %d"), CurrentTurnNumber);
+        }
+        else if (GameInstance->GetGamePhase() == EGamePhase::GAMEOVER)
+        {
+            // Count units to determine winner
+            int32 HumanUnits = 0;
+            int32 AIUnits = 0;
+
+            for (AActor* UnitActor : AllUnits)
+            {
+                AUnit* Unit = Cast<AUnit>(UnitActor);
+                if (Unit && Unit->IsAlive())
+                {
+                    if (Unit->bIsPlayerUnit)
+                        HumanUnits++;
+                    else
+                        AIUnits++;
+                }
+            }
+
+            if (HumanUnits > 0 && AIUnits == 0)
+                TurnText = TEXT("GAME OVER - PLAYER WINS");
+            else if (HumanUnits == 0 && AIUnits > 0)
+                TurnText = TEXT("GAME OVER - AI WINS");
+            else
+                TurnText = TEXT("GAME OVER");
+        }
+    }
+    else
+    {
+        TurnText = TEXT("Game Initializing...");
+    }
+
+    // Debug log to verify updates
+    UE_LOG(LogTemp, Display, TEXT("UI Updated - Turn: %s, PlayerSniper: %s, PlayerBrawler: %s"),
+        *TurnText, *PlayerSniperHPFormatted, *PlayerBrawlerHPFormatted);
+}
+
+void ASaT_GameMode::SetSelectedUnit(AUnit* Unit)
+{
+
+    CurrentlySelectedUnit = Unit;
+}
+
+FString ASaT_GameMode::GetSelectedUnitInfoText() const
+{
+    if (CurrentlySelectedUnit && CurrentlySelectedUnit->IsAlive())
+    {
+        return FString::Printf(TEXT("%s \nMovement Range: %d  \nAttack Range: %d | MinDamage: %d | MaxDamage: %d"),
+            *CurrentlySelectedUnit->UnitTypeDisplayName,
+            CurrentlySelectedUnit->Movement,
+            CurrentlySelectedUnit->RangeAttack,
+            CurrentlySelectedUnit->MinDamage,
+            CurrentlySelectedUnit->MaxDamage);
+    }
+
+    return TEXT("No Unit Selected");
+}
+
+
+void ASaT_GameMode::AddFormattedMoveToLog(bool bIsPlayerUnit, const FString& UnitType, const FString& ActionType,
+    const FVector2D& FromPosition, const FVector2D& ToPosition, int32 Damage)
+{
+    // Format the player identifier
+    FString PlayerIdentifier = bIsPlayerUnit ? TEXT("PLAYER") : TEXT("AI");
+
+    // Format the move entry based on action type
+    FString MoveEntry;
+    if (ActionType == TEXT("Move"))
+    {
+        // Format: PLAYER: Moved Sniper from (4,6) to (8,9)
+        MoveEntry = FString::Printf(TEXT("%s: Moved %s from (%d,%d) to (%d,%d)"),
+            *PlayerIdentifier,
+            *UnitType,
+            static_cast<int32>(FromPosition.X),
+            static_cast<int32>(FromPosition.Y),
+            static_cast<int32>(ToPosition.X),
+            static_cast<int32>(ToPosition.Y));
+    }
+    else if (ActionType == TEXT("Attack"))
+    {
+        if (Damage > 0)
+        {
+            // Format: PLAYER: Sniper attacks enemy at (8,9) for 7 damage
+            MoveEntry = FString::Printf(TEXT("%s: %s attacks enemy at (%d,%d) for %d damage"),
+                *PlayerIdentifier,
+                *UnitType,
+                static_cast<int32>(ToPosition.X),
+                static_cast<int32>(ToPosition.Y),
+                Damage);
+        }
+        else
+        {
+            // Format without damage value: PLAYER: Sniper attacks enemy at (8,9)
+            MoveEntry = FString::Printf(TEXT("%s: %s attacks enemy at (%d,%d)"),
+                *PlayerIdentifier,
+                *UnitType,
+                static_cast<int32>(ToPosition.X),
+                static_cast<int32>(ToPosition.Y));
+        }
+    }
+    else if (ActionType == TEXT("Skip"))
+    {
+        // Format: PLAYER: Sniper skips turn
+        MoveEntry = FString::Printf(TEXT("%s: %s skips turn"),
+            *PlayerIdentifier,
+            *UnitType);
+    }
+    else if (ActionType == TEXT("Place"))
+    {
+        // Format: PLAYER: Placed Sniper at position (8,9)
+        MoveEntry = FString::Printf(TEXT("%s: Placed %s at position (%d,%d)"),
+            *PlayerIdentifier,
+            *UnitType,
+            static_cast<int32>(ToPosition.X),
+            static_cast<int32>(ToPosition.Y));
+    }
+
+    // IMPROVED: Check for duplicates in the raw move history (without turn numbers)
+    bool bEntryExists = false;
+    for (const FString& ExistingEntry : RawMoveHistory)
+    {
+        if (ExistingEntry == MoveEntry)
+        {
+            bEntryExists = true;
+            break;
+        }
+    }
+
+    // Only add if this is a new entry
+    if (!bEntryExists)
+    {
+        // Get current turn from GameInstance
+        USaT_GameInstance* GameInstance = Cast<USaT_GameInstance>(UGameplayStatics::GetGameInstance(GetWorld()));
+        if (GameInstance)
+        {
+            // Format with turn number for game log
+            FString TurnPrefixedEntry = FString::Printf(TEXT("Turn %d: %s"),
+                GameInstance->CurrentTurnNumber, *MoveEntry);
+
+            // Add to game log with turn number
+            GameLog.Add(TurnPrefixedEntry);
+            FormattedEntry = TurnPrefixedEntry;
+
+            // Also add to move history WITHOUT turn number
+            RawMoveHistory.Add(MoveEntry);
+
+            // Keep logs from growing too large
+            while (GameLog.Num() > MaxGameLogEntries)
+            {
+                GameLog.RemoveAt(0);
+            }
+
+            while (RawMoveHistory.Num() > MaxGameLogEntries)
+            {
+                RawMoveHistory.RemoveAt(0);
+            }
+
+            // Log for debugging
+            UE_LOG(LogTemp, Display, TEXT("Game Log: %s"), *TurnPrefixedEntry);
+
+            // Update the UI
+            UpdateGameHUD();
+        }
+    }
+    else
+    {
+        UE_LOG(LogTemp, Warning, TEXT("Duplicate log entry prevented: %s"), *MoveEntry);
     }
 }
 
+// Update GetFormattedGameLog to use the raw history without turn numbers
+FString ASaT_GameMode::GetFormattedGameLog() const
+{
+    FString History;
+
+    for (int32 i = 0; i < RawMoveHistory.Num(); i++)
+    {
+        if (i > 0)
+        {
+            History.Append(TEXT("\n"));
+        }
+        History.Append(RawMoveHistory[i]);
+    }
+
+    return History;
+}

@@ -12,6 +12,8 @@ ASniper::ASniper()
     RangeAttack = 10;
     MinDamage = 4;
     MaxDamage = 8;
+
+    UnitTypeDisplayName = TEXT("Sniper");
 }
 
 void ASniper::BeginPlay()
