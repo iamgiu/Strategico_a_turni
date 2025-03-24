@@ -218,6 +218,8 @@ void ASaT_HumanPlayer::OnTurn()
         UnitSelectionWidget = nullptr;
     }
 
+    UnitAttackedThisTurn.Empty();
+
     // Reset input mode at start of turn
     APlayerController* PC = GetWorld()->GetFirstPlayerController();
     if (PC)
@@ -229,13 +231,6 @@ void ASaT_HumanPlayer::OnTurn()
     }
 
     UE_LOG(LogTemp, Warning, TEXT("Human Player Turn Started - Verification PASSED"));
-
-    // Explicitly set this player's turn flag to true
-    IsMyTurn = true;
-
-    // Explicitly set this player's turn flag to true
-    IsMyTurn = true;
-    UE_LOG(LogTemp, Warning, TEXT("Human: IsMyTurn set to TRUE"));
 
     // Explicitly set this player's turn flag to true
     IsMyTurn = true;

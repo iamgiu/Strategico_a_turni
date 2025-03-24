@@ -323,87 +323,102 @@ void AGridManager::HighlightCell(int32 GridX, int32 GridY, bool bHighlight)
 
 void AGridManager::HighlightPath(TArray<FVector2D> PathPoints, bool bClearPrevious)
 {
-    // Clear any existing path only if specified
-    if (bClearPrevious)
-    {
-        ClearPathHighlights();
-    }
+	// Extensive debug logging
+	UE_LOG(LogTemp, Warning, TEXT("===== HIGHLIGHT PATH DEBUG ====="));
+	UE_LOG(LogTemp, Warning, TEXT("Highlighting path with %d points"), PathPoints.Num());
 
-    // Debug info
-    UE_LOG(LogTemp, Warning, TEXT("===== HIGHLIGHT PATH ====="));
-    UE_LOG(LogTemp, Warning, TEXT("Highlighting path with %d points"), PathPoints.Num());
-    UE_LOG(LogTemp, Warning, TEXT("PathMaterial is %s"), PathMaterial ? TEXT("VALID") : TEXT("NULL"));
+	// Clear previous path highlights if specified
+	if (bClearPrevious)
+	{
+		ClearPathHighlights();
+	}
 
-    // Early return if no path points
-    if (PathPoints.Num() == 0)
-    {
-        UE_LOG(LogTemp, Warning, TEXT("No path points to highlight!"));
-        return;
-    }
+	// Early return if no path points
+	if (PathPoints.Num() == 0)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("No path points to highlight!"));
+		return;
+	}
 
-    // Debug: Log all path points
-    for (int32 i = 0; i < PathPoints.Num(); i++)
-    {
-        UE_LOG(LogTemp, Warning, TEXT("Path point %d: (%f, %f)"), 
-            i, PathPoints[i].X, PathPoints[i].Y);
-    }
+	// Forcefully load the path material if not already loaded
+	if (!PathMaterial)
+	{
+		PathMaterial = LoadObject<UMaterial>(nullptr, TEXT("/Game/Materials/M_Path"));
 
-    // Highlight each point in the path
-    for (int32 i = 0; i < PathPoints.Num(); i++)
-    {
-        const FVector2D& Point = PathPoints[i];
-        int32 GridX = FMath::FloorToInt(Point.X);
-        int32 GridY = FMath::FloorToInt(Point.Y);
+		if (!PathMaterial)
+		{
+			UE_LOG(LogTemp, Error, TEXT("CRITICAL: Could not load path material from /Game/Materials/M_Path"));
+			return;
+		}
+	}
 
-        // Skip invalid positions
-        if (!IsValidPosition(FVector2D(GridX, GridY)))
-        {
-            UE_LOG(LogTemp, Warning, TEXT("Invalid position (%d, %d), skipping"), GridX, GridY);
-            continue;
-        }
+	// Verify material is valid
+	if (!PathMaterial)
+	{
+		UE_LOG(LogTemp, Error, TEXT("Path material is NULL after loading attempt!"));
+		return;
+	}
 
-        // Skip the first point (unit's current position) if it's not the only point
-        if (i == 0 && PathPoints.Num() > 1)
-        {
-            UE_LOG(LogTemp, Warning, TEXT("Skipping first point (%d, %d)"), GridX, GridY);
-            continue;
-        }
+	// Clear and reset path tiles tracking
+	PathTiles.Empty();
 
-        // Get the tile at this position
-        ATile* Tile = nullptr;
-        if (TileMap.Contains(FVector2D(GridX, GridY)))
-        {
-            Tile = TileMap[FVector2D(GridX, GridY)];
-        }
+	// Highlight each point in the path
+	for (int32 i = 0; i < PathPoints.Num(); i++)
+	{
+		const FVector2D& Point = PathPoints[i];
+		int32 GridX = FMath::FloorToInt(Point.X);
+		int32 GridY = FMath::FloorToInt(Point.Y);
 
-        if (Tile)
-        {
-            // IMPORTANT: Make sure we have a valid path material
-            if (PathMaterial)
-            {
-                UE_LOG(LogTemp, Warning, TEXT("Applying path material to tile at (%d, %d)"), GridX, GridY);
-                Tile->StaticMeshComponent->SetMaterial(0, PathMaterial);
-                PathTiles.Add(Tile);
-            }
-            else if (HighlightMaterial)
-            {
-                UE_LOG(LogTemp, Warning, TEXT("No path material, using highlight material at (%d, %d)"), GridX, GridY);
-                Tile->StaticMeshComponent->SetMaterial(0, HighlightMaterial);
-                PathTiles.Add(Tile);
-            }
-            else
-            {
-                UE_LOG(LogTemp, Error, TEXT("No path or highlight material available!"));
-            }
-        }
-        else
-        {
-            UE_LOG(LogTemp, Warning, TEXT("No tile found at position (%d, %d)"), GridX, GridY);
-        }
-    }
+		// Skip invalid positions
+		if (!IsValidPosition(FVector2D(GridX, GridY)))
+		{
+			UE_LOG(LogTemp, Warning, TEXT("Invalid path position (%d, %d), skipping"), GridX, GridY);
+			continue;
+		}
 
-    UE_LOG(LogTemp, Warning, TEXT("Total path tiles highlighted: %d"), PathTiles.Num());
+		// Skip the first point (unit's current position) if it's not the only point
+		if (i == 0 && PathPoints.Num() > 1)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("Skipping first point (%d, %d)"), GridX, GridY);
+			continue;
+		}
+
+		// Get the tile at this position
+		FVector2D Position(GridX, GridY);
+		ATile* Tile = nullptr;
+		if (TileMap.Contains(Position))
+		{
+			Tile = TileMap[Position];
+		}
+
+		if (Tile && Tile->StaticMeshComponent)
+		{
+			// Create a dynamic material instance for more precise control
+			UMaterialInstanceDynamic* DynamicPathMaterial = UMaterialInstanceDynamic::Create(PathMaterial, this);
+
+			if (DynamicPathMaterial)
+			{
+				// Apply the dynamic material instance
+				Tile->StaticMeshComponent->SetMaterial(0, DynamicPathMaterial);
+
+				UE_LOG(LogTemp, Warning, TEXT("Applied dynamic path material to tile at (%d, %d)"), GridX, GridY);
+
+				PathTiles.Add(Tile);
+			}
+			else
+			{
+				UE_LOG(LogTemp, Error, TEXT("Failed to create dynamic material instance for tile at (%d, %d)"), GridX, GridY);
+			}
+		}
+		else
+		{
+			UE_LOG(LogTemp, Warning, TEXT("Invalid tile or static mesh component at (%d, %d)"), GridX, GridY);
+		}
+	}
+
+	UE_LOG(LogTemp, Warning, TEXT("Total path tiles highlighted: %d"), PathTiles.Num());
 }
+
 
 // Add this debug method to help troubleshoot path materials
 void AGridManager::DebugMaterials()
@@ -433,15 +448,22 @@ void AGridManager::ClearAllHighlights()
 
 void AGridManager::ClearPathHighlights()
 {
+	UE_LOG(LogTemp, Warning, TEXT("Clearing path highlights. Total tiles: %d"), PathTiles.Num());
+
 	// Reset all path-highlighted tiles to their original material
 	for (ATile* Tile : PathTiles)
 	{
-		if (Tile && DefaultTileMaterial)
+		if (Tile && Tile->StaticMeshComponent && DefaultTileMaterial)
 		{
 			Tile->StaticMeshComponent->SetMaterial(0, DefaultTileMaterial);
 		}
+		else
+		{
+			UE_LOG(LogTemp, Warning, TEXT("Unable to reset tile material - Tile, StaticMeshComponent, or DefaultTileMaterial is NULL"));
+		}
 	}
 
+	// Clear the path tiles array
 	PathTiles.Empty();
 }
 

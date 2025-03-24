@@ -97,8 +97,6 @@ bool USaT_GameInstance::IsSetupComplete() const
 
 bool USaT_GameInstance::CheckGameOver()
 {
-    // This method should be implemented with the specific game over conditions
-    // For now, it always returns false (game not over)
     return (CurrentPhase == EGamePhase::GAMEOVER);
 }
 

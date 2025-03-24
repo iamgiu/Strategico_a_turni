@@ -382,56 +382,63 @@ void ASaT_GameMode::EndTurn()
 
 bool ASaT_GameMode::CheckGameOver()
 {
-   /* if (bIsGameOver)
+    // Get the current game phase from GameInstance
+    USaT_GameInstance* GameInstance = Cast<USaT_GameInstance>(UGameplayStatics::GetGameInstance(GetWorld()));
+    if (!GameInstance)
     {
-        return true;
+        UE_LOG(LogTemp, Error, TEXT("Failed to get GameInstance in CheckGameOver!"));
+        return false;
     }
 
-    // Check if any player has lost all units
-    TArray<int32> PlayerUnitCounts;
-    PlayerUnitCounts.Init(0, Players.Num());
-
-    // Count units for each player
-    TArray<AActor*> AllUnits;
-    UGameplayStatics::GetAllActorsOfClass(GetWorld(), AUnit::StaticClass(), AllUnits);
-
-    for (AActor* UnitActor : AllUnits)
+    // Only check for game over during the playing phase
+    if (GameInstance->GetGamePhase() == EGamePhase::PLAYING)
     {
-        AUnit* Unit = Cast<AUnit>(UnitActor);
-        if (Unit)
+        // Check if any player has lost all units
+        int32 HumanUnitCount = 0;
+        int32 AIUnitCount = 0;
+
+        // Count units for each player
+        TArray<AActor*> AllUnits;
+        UGameplayStatics::GetAllActorsOfClass(GetWorld(), AUnit::StaticClass(), AllUnits);
+
+        for (AActor* UnitActor : AllUnits)
         {
-            // Count units by player ownership
-            int32 PlayerIndex = Unit->bIsPlayerUnit ? 0 : 1; // Assuming player units are human, non-player are AI
-            PlayerUnitCounts[PlayerIndex]++;
-        }
-    }
-
-    // Check if any player has no units left
-    for (int32 i = 0; i < PlayerUnitCounts.Num(); i++)
-    {
-        if (PlayerUnitCounts[i] == 0)
-        {
-            // This player has lost
-            bIsGameOver = true;
-
-            // Determine winner and loser
-            int32 WinnerIndex = (i + 1) % Players.Num();
-
-            // Notify players of result
-            Players[WinnerIndex]->OnWin();
-            Players[i]->OnLose();
-
-            // Update game phase in GameInstance
-            USaT_GameInstance* GameInstance = Cast<USaT_GameInstance>(UGameplayStatics::GetGameInstance(GetWorld()));
-            if (GameInstance)
+            AUnit* Unit = Cast<AUnit>(UnitActor);
+            if (Unit && Unit->IsAlive())
             {
-                GameInstance->SetGamePhase(EGamePhase::GAMEOVER);
+                if (Unit->bIsPlayerUnit)
+                    HumanUnitCount++;
+                else
+                    AIUnitCount++;
+            }
+        }
+
+        // Check if either player has no units left
+        if (HumanUnitCount == 0 || AIUnitCount == 0)
+        {
+            // Set game phase to GAMEOVER
+            GameInstance->SetGamePhase(EGamePhase::GAMEOVER);
+
+            // Determine the winner
+            bool bHumanWins = (AIUnitCount == 0);
+
+            // Notify players of the result
+            for (auto PlayerInterface : Players)
+            {
+                if (PlayerInterface)
+                {
+                    if (bHumanWins && PlayerInterface->PlayerNumber == 0)
+                        PlayerInterface->OnWin();
+                    else if (!bHumanWins && PlayerInterface->PlayerNumber == 1)
+                        PlayerInterface->OnWin();
+                    else
+                        PlayerInterface->OnLose();
+                }
             }
 
-            UE_LOG(LogTemp, Display, TEXT("Game over! Player %d wins, Player %d loses"), WinnerIndex + 1, i + 1);
             return true;
         }
-    }*/
+    }
 
     return false;
 }
@@ -608,23 +615,5 @@ void ASaT_GameMode::UpdateGameHUD()
         // Get the current turn number
         CurrentTurnNumber = GameInstance->CurrentTurnNumber;
     }
-
-    // NEW CODE: Create formatted text for the UI
-    // Format HP values with max values
-    PlayerSniperHPFormatted = FString::Printf(TEXT("%d/20"), PlayerSniperHP);
-    PlayerBrawlerHPFormatted = FString::Printf(TEXT("%d/40"), PlayerBrawlerHP);
-    AISniperHPFormatted = FString::Printf(TEXT("%d/20"), AISniperHP);
-    AIBrawlerHPFormatted = FString::Printf(TEXT("%d/40"), AIBrawlerHP);
-
-    // Format turn display
-    TurnText = IsPlayerTurn
-        ? FString::Printf(TEXT("Human Turn %d"), CurrentTurnNumber)
-        : FString::Printf(TEXT("AI Turn %d"), CurrentTurnNumber);
-
-    UE_LOG(LogTemp, Warning, TEXT("HUD Data - Player: Sniper=%s (%s), Brawler=%s (%s)"),
-        *PlayerSniperPos, *PlayerSniperHPFormatted, *PlayerBrawlerPos, *PlayerBrawlerHPFormatted);
-    UE_LOG(LogTemp, Warning, TEXT("HUD Data - AI: Sniper=%s (%s), Brawler=%s (%s)"),
-        *AISniperPos, *AISniperHPFormatted, *AIBrawlerPos, *AIBrawlerHPFormatted);
-    UE_LOG(LogTemp, Warning, TEXT("HUD Data - Turn: %s, Number=%d"),
-        *TurnText, CurrentTurnNumber);
 }
+

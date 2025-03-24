@@ -44,59 +44,88 @@ public:
 	int32 CurrentPlayer;
 	bool bIsGameOver;
 
-	UPROPERTY(BlueprintReadOnly, Category = "Game")
-	EPlayerType CurrentPlayerType;
+    UPROPERTY(BlueprintReadOnly, Category = "Game")
+    EPlayerType CurrentPlayerType;
 
-	UPROPERTY(BlueprintReadOnly, Category = "UI")
-	AUnit* SomeUnitVariable;
+    UPROPERTY(BlueprintReadOnly, Category = "UI")
+    AUnit* SomeUnitVariable;
 
-	UPROPERTY(BlueprintReadOnly, Category = "UI")
-	int32 PlayerSniperHP;
+    UPROPERTY(BlueprintReadOnly, Category = "UI")
+    int32 PlayerSniperHP;
 
-	UPROPERTY(BlueprintReadOnly, Category = "UI")
-	int32 PlayerBrawlerHP;
+    UPROPERTY(BlueprintReadOnly, Category = "UI")
+    int32 PlayerBrawlerHP;
 
-	UPROPERTY(BlueprintReadOnly, Category = "UI")
-	int32 AISniperHP;
+    UPROPERTY(BlueprintReadOnly, Category = "UI")
+    int32 AISniperHP;
 
-	UPROPERTY(BlueprintReadOnly, Category = "UI")
-	int32 AIBrawlerHP;
+    UPROPERTY(BlueprintReadOnly, Category = "UI")
+    int32 AIBrawlerHP;
 
-	UPROPERTY(BlueprintReadOnly, Category = "UI")
-	FString PlayerSniperPos;
+    UPROPERTY(BlueprintReadOnly, Category = "UI")
+    FString PlayerSniperPos;
 
-	UPROPERTY(BlueprintReadOnly, Category = "UI")
-	FString PlayerBrawlerPos;
+    UPROPERTY(BlueprintReadOnly, Category = "UI")
+    FString PlayerBrawlerPos;
 
-	UPROPERTY(BlueprintReadOnly, Category = "UI")
-	FString AISniperPos;
+    UPROPERTY(BlueprintReadOnly, Category = "UI")
+    FString AISniperPos;
 
-	UPROPERTY(BlueprintReadOnly, Category = "UI")
-	FString AIBrawlerPos;
+    UPROPERTY(BlueprintReadOnly, Category = "UI")
+    FString AIBrawlerPos;
 
-	UPROPERTY(BlueprintReadOnly, Category = "UI")
-	bool IsPlayerTurn;
+    UPROPERTY(BlueprintReadOnly, Category = "UI")
+    bool IsPlayerTurn;
 
-	UPROPERTY(BlueprintReadOnly, Category = "UI")
-	int32 CurrentTurnNumber;
+    UPROPERTY(BlueprintReadOnly, Category = "UI")
+    int32 CurrentTurnNumber;
 
-	UPROPERTY(EditDefaultsOnly, Category = "UI")
-	TSubclassOf<UUserWidget> MainGameHUDClass;
+    UPROPERTY(EditDefaultsOnly, Category = "UI")
+    TSubclassOf<UUserWidget> MainGameHUDClass;
 
-	UPROPERTY(BlueprintReadOnly, Category = "UI")
-	FString PlayerSniperHPFormatted;
+    UPROPERTY(BlueprintReadOnly, Category = "UI")
+    FString PlayerSniperHPFormatted;
 
-	UPROPERTY(BlueprintReadOnly, Category = "UI")
-	FString PlayerBrawlerHPFormatted;
+    UPROPERTY(BlueprintReadOnly, Category = "UI")
+    FString PlayerBrawlerHPFormatted;
 
-	UPROPERTY(BlueprintReadOnly, Category = "UI")
-	FString AISniperHPFormatted;
+    UPROPERTY(BlueprintReadOnly, Category = "UI")
+    FString AISniperHPFormatted;
 
-	UPROPERTY(BlueprintReadOnly, Category = "UI")
-	FString AIBrawlerHPFormatted;
+    UPROPERTY(BlueprintReadOnly, Category = "UI")
+    FString AIBrawlerHPFormatted;
 
-	UPROPERTY(BlueprintReadOnly, Category = "UI")
-	FString TurnText;
+    UPROPERTY(BlueprintReadOnly, Category = "UI")
+    FString TurnText;
+
+    /* Getters for UI Binding */
+    UFUNCTION(BlueprintCallable, Category = "UI")
+    FText GetPlayerSniperHPText() const { return FText::AsNumber(PlayerSniperHP); }
+
+    UFUNCTION(BlueprintCallable, Category = "UI")
+    FText GetPlayerBrawlerHPText() const { return FText::AsNumber(PlayerBrawlerHP); }
+
+    UFUNCTION(BlueprintCallable, Category = "UI")
+    FText GetAISniperHPText() const { return FText::AsNumber(AISniperHP); }
+
+    UFUNCTION(BlueprintCallable, Category = "UI")
+    FText GetAIBrawlerHPText() const { return FText::AsNumber(AIBrawlerHP); }
+
+    UFUNCTION(BlueprintCallable, Category = "UI")
+    FText GetPlayerSniperPosText() const { return FText::FromString(PlayerSniperPos); }
+
+    UFUNCTION(BlueprintCallable, Category = "UI")
+    FText GetPlayerBrawlerPosText() const { return FText::FromString(PlayerBrawlerPos); }
+
+    UFUNCTION(BlueprintCallable, Category = "UI")
+    FText GetAISniperPosText() const { return FText::FromString(AISniperPos); }
+
+    UFUNCTION(BlueprintCallable, Category = "UI")
+    FText GetAIBrawlerPosText() const { return FText::FromString(AIBrawlerPos); }
+
+    UFUNCTION(BlueprintCallable, Category = "UI")
+    FText GetTurnText() const { return FText::FromString(TurnText); }
+
 
 protected:
 
