@@ -166,6 +166,17 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Game Log")
     FString GetFormattedGameLog() const;
 
+    void NotifyUnitDeath(AUnit* DeadUnit);
+
+    UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "UI")
+    TSubclassOf<UUserWidget> AIThinkingWidgetClass;
+
+    UPROPERTY()
+    UUserWidget* AIThinkingWidget;
+
+    // Method to show/hide the widget
+    void ShowAIThinkingWidget(bool bShow);
+
 protected:
 
 	void InitializePlayers();

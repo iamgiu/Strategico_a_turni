@@ -128,6 +128,16 @@ public:
 
 	void DebugMaterials();
 
+	UPROPERTY(EditDefaultsOnly, Category = "Materials")
+	UMaterialInterface* ObstacleMaterial;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Grid", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	float ObstaclePercentage;
+
+	void GenerateObstacles();
+	void VerifyGridConnectivity();
+	bool RemoveObstacleToCreatePath(int32 UnreachableX, int32 UnreachableY);
+
 	//public:	
 	//	// Called every frame
 	//	virtual void Tick(float DeltaTime) override;

@@ -34,6 +34,31 @@ AUnit::AUnit()
     bIsPlayerUnit = true;
     bIsSelected = false;
     bHasMovedThisTurn = false;
+
+    static ConstructorHelpers::FObjectFinder<UMaterial> BlueMaterialAsset(TEXT("/Game/Materials/M_Player"));
+    if (BlueMaterialAsset.Succeeded())
+    {
+        BlueMaterial = BlueMaterialAsset.Object;
+    }
+    else
+    {
+        UE_LOG(LogTemp, Error, TEXT("Failed to load Blue Player material!"));
+    }
+
+    static ConstructorHelpers::FObjectFinder<UMaterial> RedMaterialAsset(TEXT("/Game/Materials/M_AI"));
+    if (RedMaterialAsset.Succeeded())
+    {
+        RedMaterial = RedMaterialAsset.Object;
+    }
+    else
+    {
+        UE_LOG(LogTemp, Error, TEXT("Failed to load Red AI material!"));
+    }
+
+    // Make sure to log success or failure for debugging
+    UE_LOG(LogTemp, Display, TEXT("Unit constructor: Blue material %s, Red material %s"),
+        BlueMaterial ? TEXT("loaded") : TEXT("failed"),
+        RedMaterial ? TEXT("loaded") : TEXT("failed"));
 }
 
 // Called when the game starts or when spawned
@@ -41,25 +66,67 @@ void AUnit::BeginPlay()
 {
     Super::BeginPlay();
 
-    // Make sure we have valid materials
-    if (BaseMaterial == nullptr)
+    // Verify team setting
+    UE_LOG(LogTemp, Display, TEXT("Unit %s BeginPlay: Team is %s"),
+        *GetName(), bIsPlayerUnit ? TEXT("Player") : TEXT("AI"));
+
+    UpdateTeamColor();
+}
+
+void AUnit::UpdateTeamColor()
+{
+    if (!StaticMeshComponent)
     {
-        UE_LOG(LogTemp, Error, TEXT("Unit %s: BaseMaterial is not set!"), *GetName());
-        // Maybe set a default material here
+        UE_LOG(LogTemp, Error, TEXT("Unit %s: StaticMeshComponent is NULL!"), *GetName());
+        return;
     }
 
-    if (SelectedMaterial == nullptr)
+    // Get the appropriate team material based on bIsPlayerUnit flag
+    UMaterialInterface* TeamMaterial = nullptr;
+
+    if (bIsPlayerUnit)
     {
-        UE_LOG(LogTemp, Error, TEXT("Unit %s: SelectedMaterial is not set!"), *GetName());
-        // Maybe set a default material here
+        TeamMaterial = BlueMaterial;
+        UE_LOG(LogTemp, Display, TEXT("Unit %s: Using BLUE material for PLAYER unit"), *GetName());
+    }
+    else
+    {
+        TeamMaterial = RedMaterial;
+        UE_LOG(LogTemp, Display, TEXT("Unit %s: Using RED material for AI unit"), *GetName());
     }
 
-    // Set the initial material
-    if (BaseMaterial)
+    // Apply the team material if it exists
+    if (TeamMaterial)
     {
-        StaticMeshComponent->SetMaterial(0, BaseMaterial);
-        UE_LOG(LogTemp, Warning, TEXT("Unit %s: Initial material set to BaseMaterial"), *GetName());
+        // Apply to all material slots
+        for (int32 i = 0; i < StaticMeshComponent->GetNumMaterials(); i++)
+        {
+            StaticMeshComponent->SetMaterial(i, TeamMaterial);
+        }
     }
+    else
+    {
+        UE_LOG(LogTemp, Error, TEXT("Unit %s: Team material is NULL!"), *GetName());
+    }
+
+    // Maintain selected visual state if needed
+    if (bIsSelected && SelectedMaterial)
+    {
+        StaticMeshComponent->SetMaterial(0, SelectedMaterial);
+    }
+}
+
+void AUnit::SetPlayerUnit(bool bIsPlayer)
+{
+    // Add more detailed logging
+    UE_LOG(LogTemp, Error, TEXT("SetPlayerUnit CALLED: Unit %s - Setting team to %s"),
+        *GetName(), bIsPlayer ? TEXT("PLAYER (BLUE)") : TEXT("AI (RED)"));
+
+    // Set the team flag
+    bIsPlayerUnit = bIsPlayer;
+
+    // Force update team color immediately
+    UpdateTeamColor();
 }
 
 void AUnit::ShowSelected()
@@ -79,19 +146,26 @@ void AUnit::ShowSelected()
 
 void AUnit::UnshowSelected()
 {
-    // Change back to the base material
-    if (BaseMaterial)
-    {
-        UE_LOG(LogTemp, Warning, TEXT("Unit %s: Applying base material"), *GetName());
-        StaticMeshComponent->SetMaterial(0, BaseMaterial);
-        bIsSelected = false;
+    UE_LOG(LogTemp, Error, TEXT("UnshowSelected: Unit %s, Team = %s"),
+        *GetName(), bIsPlayerUnit ? TEXT("PLAYER (BLUE)") : TEXT("AI (RED)"));
 
-        // Don't clear highlights - this should be controlled by the player class
+    // Explicitly choose the correct material based on team
+    UMaterialInterface* TeamMaterial = bIsPlayerUnit ? BlueMaterial : RedMaterial;
+
+    if (TeamMaterial)
+    {
+        // Apply to all material slots
+        for (int32 i = 0; i < StaticMeshComponent->GetNumMaterials(); i++)
+        {
+            StaticMeshComponent->SetMaterial(i, TeamMaterial);
+        }
     }
     else
     {
-        UE_LOG(LogTemp, Error, TEXT("Unit %s: BaseMaterial is NULL!"), *GetName());
+        UE_LOG(LogTemp, Error, TEXT("UnshowSelected: Team material is NULL for %s!"), *GetName());
     }
+
+    bIsSelected = false;
 }
 
 void AUnit::DamageTaken(int32 Damage)
@@ -99,15 +173,9 @@ void AUnit::DamageTaken(int32 Damage)
     // Reduce the HP by the damage amount
     Hp = FMath::Max(0, Hp - Damage);
 
-    // Optional: Add visual feedback when taking damage
-    // For example, play particle effect or animation
-
     // Check if unit is dead
     if (!IsAlive())
     {
-        // Handle death
-        // This could trigger an animation, spawn particles, etc.
-
         // Destroy the actor after a delay to allow for death animations
         SetActorHiddenInGame(true);
         SetActorEnableCollision(false);
@@ -116,8 +184,7 @@ void AUnit::DamageTaken(int32 Damage)
         ASaT_GameMode* GameMode = Cast<ASaT_GameMode>(UGameplayStatics::GetGameMode(GetWorld()));
         if (GameMode)
         {
-            // You would need to implement this function in your game mode
-            // GameMode->NotifyUnitDeath(this);
+            GameMode->NotifyUnitDeath(this);
         }
 
         // Destroy the actor with a delay (e.g., 2 seconds)

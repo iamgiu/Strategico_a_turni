@@ -35,6 +35,19 @@ public:
     UPROPERTY(EditAnywhere, Category = "Materials")
     UMaterialInterface* SelectedMaterial;
 
+    // Team color materials
+    UPROPERTY(EditAnywhere, Category = "Materials")
+    UMaterialInterface* BlueMaterial;  // Material for player units
+
+    UPROPERTY(EditAnywhere, Category = "Materials")
+    UMaterialInterface* RedMaterial;   // Material for AI units
+
+    UFUNCTION(BlueprintCallable, Category = "Visual")
+    void UpdateTeamColor();
+
+    UFUNCTION(BlueprintCallable, Category = "Visual")
+    void SetPlayerUnit(bool bIsPlayer);
+
     // Visual feedback when unit is selected
     UFUNCTION(BlueprintCallable, Category = "Visual")
     void ShowSelected();

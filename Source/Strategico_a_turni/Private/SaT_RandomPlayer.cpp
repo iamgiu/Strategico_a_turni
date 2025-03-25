@@ -104,6 +104,13 @@ void ASaT_RandomPlayer::OnTurn()
     IsMyTurn = true;
     UE_LOG(LogTemp, Warning, TEXT("AI: IsMyTurn set to TRUE"));
 
+    AGameModeBase* GameModeBase = UGameplayStatics::GetGameMode(GetWorld());
+    ASaT_GameMode* GameMode = Cast<ASaT_GameMode>(GameModeBase);
+    if (GameMode)
+    {
+        GameMode->ShowAIThinkingWidget(true);
+    }
+
     // Check the game phase
     EGamePhase CurrentPhase = GameInstance->GetGamePhase();
     UE_LOG(LogTemp, Warning, TEXT("AI Turn - Current phase: %s"),
@@ -155,6 +162,12 @@ void ASaT_RandomPlayer::OnTurn()
             UE_LOG(LogTemp, Warning, TEXT("AI: No units found, ending turn"));
             EndTurn();
         }
+    }
+
+    // Hide AI thinking widget at end of turn processing
+    if (GameMode)
+    {
+        GameMode->ShowAIThinkingWidget(false);
     }
 }
 
@@ -264,7 +277,10 @@ void ASaT_RandomPlayer::PlaceRandomUnit()
             {
                 Unit->GridX = GridX;
                 Unit->GridY = GridY;
-                Unit->bIsPlayerUnit = false; // Set as AI unit
+                Unit->bIsPlayerUnit = false; // EXPLICITLY set as AI unit
+                Unit->UpdateTeamColor();      // Force update team color immediately
+
+                UE_LOG(LogTemp, Warning, TEXT("AI Unit placed - bIsPlayerUnit set to FALSE, calling UpdateTeamColor"));
 
                 // Mark cell as occupied
                 GridManager->OccupyCell(GridX, GridY, Unit);

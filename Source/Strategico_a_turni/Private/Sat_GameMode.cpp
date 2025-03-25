@@ -548,6 +548,22 @@ void ASaT_GameMode::NotifyCurrentPlayerTurn()
     UpdateGameHUD();
 }
 
+void ASaT_GameMode::NotifyUnitDeath(AUnit* DeadUnit)
+{
+    if (!DeadUnit)
+        return;
+
+    // Log the death
+    UE_LOG(LogTemp, Warning, TEXT("Unit death: %s at position (%d,%d)"),
+        *DeadUnit->GetName(), DeadUnit->GridX, DeadUnit->GridY);
+
+    // Check if this affects game over conditions
+    CheckGameOver();
+
+    // Update the UI
+    UpdateGameHUD();
+}
+
 void ASaT_GameMode::UpdateGameHUD()
 {
     // Find all player units and get their status
@@ -818,4 +834,26 @@ FString ASaT_GameMode::GetFormattedGameLog() const
     }
 
     return History;
+}
+
+void ASaT_GameMode::ShowAIThinkingWidget(bool bShow)
+{
+    // Create widget if not already created
+    if (!AIThinkingWidget && AIThinkingWidgetClass)
+    {
+        AIThinkingWidget = CreateWidget<UUserWidget>(GetWorld(), AIThinkingWidgetClass);
+    }
+
+    // Show or hide the widget
+    if (AIThinkingWidget)
+    {
+        if (bShow)
+        {
+            AIThinkingWidget->AddToViewport();
+        }
+        else
+        {
+            AIThinkingWidget->RemoveFromParent();
+        }
+    }
 }

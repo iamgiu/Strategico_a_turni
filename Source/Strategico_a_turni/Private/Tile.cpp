@@ -20,7 +20,8 @@ ATile::ATile()
 	Status = ETileStatus::EMPTY;
 	PlayerOwner = -1;
 	TileGridPosition = FVector2D(0, 0);
-
+	bIsObstacle = false;  // Initialize to not an obstacle
+	bIsOccupied = false; 
 }
 
 void ATile::SetTileStatus(const int32 TileOwner, const ETileStatus TileStatus)

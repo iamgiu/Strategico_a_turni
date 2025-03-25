@@ -20,6 +20,8 @@ AGridManager::AGridManager()
 	// tile padding percentage 
 	CellPadding = 0.01f;
 
+	ObstaclePercentage = 0.1f;
+
 	static ConstructorHelpers::FObjectFinder<UMaterial> DefaultMatAsset(TEXT("/Game/Materials/M_BaseMaterial"));
 	if (DefaultMatAsset.Succeeded())
 	{
@@ -36,6 +38,12 @@ AGridManager::AGridManager()
 	if (PathMatAsset.Succeeded())
 	{
 		PathMaterial = PathMatAsset.Object;
+	}
+
+	static ConstructorHelpers::FObjectFinder<UMaterial> ObstacleMatAsset(TEXT("/Game/Materials/M_Obstacle"));
+	if (ObstacleMatAsset.Succeeded())
+	{
+		ObstacleMaterial = ObstacleMatAsset.Object;
 	}
 }
 
@@ -90,6 +98,7 @@ void AGridManager::BeginPlay()
 
 void AGridManager::GenerateField()
 {
+	// First, generate the basic grid without obstacles
 	for (int32 IndexX = 0; IndexX < Size; IndexX++)
 	{
 		for (int32 IndexY = 0; IndexY < Size; IndexY++)
@@ -100,9 +109,8 @@ void AGridManager::GenerateField()
 			const float Zscaling = 0.01f;
 			Obj->SetActorScale3D(FVector(TileScale, TileScale, Zscaling));
 
-			// This is the critical part - setting the grid position
+			// Set the grid position
 			Obj->SetGridPosition(IndexX, IndexY);
-			// You should also be setting the GridX and GridY properties directly
 			Obj->GridX = IndexX;
 			Obj->GridY = IndexY;
 
@@ -110,6 +118,9 @@ void AGridManager::GenerateField()
 			TileMap.Add(FVector2D(IndexX, IndexY), Obj);
 		}
 	}
+
+	// After generating the basic grid, add obstacles
+	GenerateObstacles();
 }
 
 FVector2D AGridManager::GetPosition(const FHitResult& Hit)
@@ -202,21 +213,21 @@ bool AGridManager::AllEqual(const TArray<int32>& Array) const
 // Verifica se una cella è occupata
 bool AGridManager::IsCellOccupied(int32 GridX, int32 GridY)
 {
-	// Verifica se le coordinate sono valide
+	// Verify if coordinates are valid
 	if (!IsValidPosition(FVector2D(GridX, GridY)))
 	{
-		return true; // Considera le posizioni non valide come occupate
+		return true; // Consider invalid positions as occupied
 	}
 
-	// Trova il tile corrispondente
+	// Find the tile at the specified position
 	FVector2D Position(GridX, GridY);
 	if (TileMap.Contains(Position))
 	{
 		ATile* Tile = TileMap[Position];
 		if (Tile)
 		{
-			// Verifica se il tile è occupato
-			return Tile->bIsOccupied;
+			// Check if the tile is occupied or is an obstacle
+			return Tile->bIsOccupied || Tile->bIsObstacle;
 		}
 	}
 
@@ -467,19 +478,223 @@ void AGridManager::ClearPathHighlights()
 	PathTiles.Empty();
 }
 
-/*FVector AGridManager::GetWorldLocationFromGrid(int32 GridX, int32 GridY)
+void AGridManager::GenerateObstacles()
 {
-	// Usa NextCellPositionMultiplier per mantenere coerenza con il resto del codice
-	FVector WorldLocation = GetRelativeLocationByXYPosition(GridX-1, GridY-1);
+	// Calculate how many obstacles to generate based on percentage
+	int32 TotalCells = Size * Size;
+	int32 NumObstacles = FMath::RoundToInt(TotalCells * ObstaclePercentage);
 
-	// Aggiungi offset verticale per rendere l'unità visibile sopra il tile
-	WorldLocation.Z += 50.0f;
+	UE_LOG(LogTemp, Warning, TEXT("Generating %d obstacles (%.1f%% of grid)"),
+		NumObstacles, ObstaclePercentage * 100.0f);
 
-	UE_LOG(LogTemp, Warning, TEXT("Posizione mondo calcolata: X=%f, Y=%f, Z=%f"),
-		WorldLocation.X, WorldLocation.Y, WorldLocation.Z);
+	// Keep track of which cells we've already processed
+	TArray<bool> ProcessedCells;
+	ProcessedCells.SetNumZeroed(TotalCells);
 
-	return WorldLocation;
-}*/
+	// Place obstacles randomly
+	int32 PlacedObstacles = 0;
+	while (PlacedObstacles < NumObstacles)
+	{
+		// Generate random position
+		int32 RandomX = FMath::RandRange(0, Size - 1);
+		int32 RandomY = FMath::RandRange(0, Size - 1);
+		int32 CellIndex = RandomY * Size + RandomX;
+
+		// Skip if we already processed this cell
+		if (ProcessedCells[CellIndex])
+			continue;
+
+		ProcessedCells[CellIndex] = true;
+
+		// Skip positions around edges (leaving room for unit placement)
+		if (RandomX < 0 || RandomX >= Size - 1 || RandomY < 0 || RandomY >= Size - 1)
+			continue;
+
+		// Get the tile at this position
+		ATile* Tile = TileMap[FVector2D(RandomX, RandomY)];
+		if (!Tile)
+			continue;
+
+		// Set as obstacle
+		Tile->bIsObstacle = true;
+
+		// Apply obstacle material
+		if (ObstacleMaterial)
+		{
+			Tile->StaticMeshComponent->SetMaterial(0, ObstacleMaterial);
+		}
+
+		// Also mark as occupied so units can't move here
+		Tile->bIsOccupied = true;
+
+		PlacedObstacles++;
+	}
+
+	// Verify connectivity to ensure all non-obstacle cells can be reached
+	VerifyGridConnectivity();
+}
+
+void AGridManager::VerifyGridConnectivity()
+{
+	// Start with all cells marked as unreachable
+	TArray<bool> Visited;
+	Visited.SetNumZeroed(Size * Size);
+
+	// Find first non-obstacle cell to start from
+	int32 StartX = 0, StartY = 0;
+	bool bFoundStart = false;
+
+	for (int32 Y = 0; Y < Size && !bFoundStart; Y++)
+	{
+		for (int32 X = 0; X < Size && !bFoundStart; X++)
+		{
+			ATile* Tile = TileMap[FVector2D(X, Y)];
+			if (Tile && !Tile->bIsObstacle)
+			{
+				StartX = X;
+				StartY = Y;
+				bFoundStart = true;
+			}
+		}
+	}
+
+	// Run BFS from the start position
+	TQueue<FVector2D> Queue;
+	Queue.Enqueue(FVector2D(StartX, StartY));
+	Visited[StartY * Size + StartX] = true;
+
+	// Direction vectors (4 directions)
+	int32 dx[] = { 1, -1, 0, 0 };
+	int32 dy[] = { 0, 0, 1, -1 };
+
+	while (!Queue.IsEmpty())
+	{
+		FVector2D Current;
+		Queue.Dequeue(Current);
+
+		// Try all four directions
+		for (int32 i = 0; i < 4; i++)
+		{
+			int32 NewX = FMath::FloorToInt(Current.X) + dx[i];
+			int32 NewY = FMath::FloorToInt(Current.Y) + dy[i];
+
+			// Skip if out of bounds
+			if (NewX < 0 || NewX >= Size || NewY < 0 || NewY >= Size)
+				continue;
+
+			int32 NewIndex = NewY * Size + NewX;
+
+			// Skip if already visited
+			if (Visited[NewIndex])
+				continue;
+
+			// Skip if it's an obstacle
+			ATile* Tile = TileMap[FVector2D(NewX, NewY)];
+			if (Tile && !Tile->bIsObstacle)
+			{
+				Visited[NewIndex] = true;
+				Queue.Enqueue(FVector2D(NewX, NewY));
+			}
+		}
+	}
+
+	// Check for any unreachable cells and fix them
+	int32 FixedObstacles = 0;
+	for (int32 Y = 0; Y < Size; Y++)
+	{
+		for (int32 X = 0; X < Size; X++)
+		{
+			int32 Index = Y * Size + X;
+			ATile* Tile = TileMap[FVector2D(X, Y)];
+
+			if (Tile && !Tile->bIsObstacle && !Visited[Index])
+			{
+				// This is a non-obstacle cell that couldn't be reached
+				// Find the nearest obstacle and remove it to create a path
+				if (RemoveObstacleToCreatePath(X, Y))
+				{
+					FixedObstacles++;
+				}
+			}
+		}
+	}
+
+	if (FixedObstacles > 0)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Fixed %d obstacles to ensure grid connectivity"), FixedObstacles);
+	}
+}
+
+bool AGridManager::RemoveObstacleToCreatePath(int32 UnreachableX, int32 UnreachableY)
+{
+	// Find the nearest reachable non-obstacle cell (we know it exists from our BFS)
+	int32 BestX = -1, BestY = -1;
+	float BestDistance = FLT_MAX;
+
+	for (int32 Y = 0; Y < Size; Y++)
+	{
+		for (int32 X = 0; X < Size; X++)
+		{
+			ATile* Tile = TileMap[FVector2D(X, Y)];
+			if (Tile && !Tile->bIsObstacle)
+			{
+				float Distance = FVector2D::DistSquared(FVector2D(X, Y), FVector2D(UnreachableX, UnreachableY));
+				if (Distance < BestDistance)
+				{
+					BestDistance = Distance;
+					BestX = X;
+					BestY = Y;
+				}
+			}
+		}
+	}
+
+	if (BestX == -1 || BestY == -1)
+		return false;  // No reachable cells found (shouldn't happen)
+
+	// Create a simple path by removing obstacles in a straight line
+	int32 DiffX = UnreachableX - BestX;
+	int32 DiffY = UnreachableY - BestY;
+
+	// Move horizontally first, then vertically
+	int32 StepX = (DiffX > 0) ? 1 : -1;
+	if (DiffX != 0) StepX = (DiffX > 0) ? 1 : -1;
+
+	// Remove obstacles horizontally
+	for (int32 X = BestX; X != UnreachableX; X += StepX)
+	{
+		ATile* Tile = TileMap[FVector2D(X, BestY)];
+		if (Tile && Tile->bIsObstacle)
+		{
+			Tile->bIsObstacle = false;
+			Tile->bIsOccupied = false;
+			if (DefaultTileMaterial)
+			{
+				Tile->StaticMeshComponent->SetMaterial(0, DefaultTileMaterial);
+			}
+			return true;  // We only need to remove one obstacle to fix connectivity
+		}
+	}
+
+	// Remove obstacles vertically
+	int32 StepY = (DiffY > 0) ? 1 : -1;
+	for (int32 Y = BestY; Y != UnreachableY; Y += StepY)
+	{
+		ATile* Tile = TileMap[FVector2D(UnreachableX, Y)];
+		if (Tile && Tile->bIsObstacle)
+		{
+			Tile->bIsObstacle = false;
+			Tile->bIsOccupied = false;
+			if (DefaultTileMaterial)
+			{
+				Tile->StaticMeshComponent->SetMaterial(0, DefaultTileMaterial);
+			}
+			return true;  // We only need to remove one obstacle to fix connectivity
+		}
+	}
+
+	return false;  // No obstacles needed to be removed
+}
 
 // Called every frame
 //void AGameField::Tick(float DeltaTime)

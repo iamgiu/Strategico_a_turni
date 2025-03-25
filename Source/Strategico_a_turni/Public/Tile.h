@@ -49,6 +49,9 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
 	UStaticMeshComponent* StaticMeshComponent;
 
+	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "Grid")
+	bool bIsObstacle;
+
 protected:
 	// Called when the game starts or when spawned
 	virtual void BeginPlay() override;
