@@ -76,6 +76,19 @@ void ASaT_RandomPlayer::Tick(float DeltaTime)
 
 void ASaT_RandomPlayer::OnTurn()
 {
+    UE_LOG(LogTemp, Warning, TEXT("AI Turn Started - Attempting to show thinking widget"));
+    AGameModeBase* GameModeBase = UGameplayStatics::GetGameMode(GetWorld());
+    ASaT_GameMode* GameMode = Cast<ASaT_GameMode>(GameModeBase);
+    if (GameMode)
+    {
+        UGameplayStatics::GetPlayerController(GetWorld(), 0)->SetShowMouseCursor(false);
+        GameMode->ShowAIThinkingWidget(true);
+    }
+    else
+    {
+        UE_LOG(LogTemp, Error, TEXT("Could not find GameMode to show thinking widget"));
+    }
+
     // Debug - identify which Player object this is
     UE_LOG(LogTemp, Warning, TEXT("OnTurn called on AI Player (this=%p)"), this);
 
@@ -104,13 +117,6 @@ void ASaT_RandomPlayer::OnTurn()
     IsMyTurn = true;
     UE_LOG(LogTemp, Warning, TEXT("AI: IsMyTurn set to TRUE"));
 
-    AGameModeBase* GameModeBase = UGameplayStatics::GetGameMode(GetWorld());
-    ASaT_GameMode* GameMode = Cast<ASaT_GameMode>(GameModeBase);
-    if (GameMode)
-    {
-        GameMode->ShowAIThinkingWidget(true);
-    }
-
     // Check the game phase
     EGamePhase CurrentPhase = GameInstance->GetGamePhase();
     UE_LOG(LogTemp, Warning, TEXT("AI Turn - Current phase: %s"),
@@ -136,12 +142,19 @@ void ASaT_RandomPlayer::OnTurn()
         // In SETUP phase, use a timer for unit placement
         FTimerHandle TimerHandle;
         UE_LOG(LogTemp, Warning, TEXT("AI: Scheduling unit placement in 1.5 seconds..."));
+
         GetWorld()->GetTimerManager().SetTimer(TimerHandle, this, &ASaT_RandomPlayer::PlaceRandomUnit, 1.5f, false);
     }
     else if (CurrentPhase == EGamePhase::PLAYING)
     {
         // NEW FUNCTIONALITY FOR PLAYING PHASE
         UE_LOG(LogTemp, Warning, TEXT("AI: In PLAYING phase, starting AI actions..."));
+
+        // Hide AI thinking widget at end of turn processing
+        if (GameMode)
+        {
+            GameMode->ShowAIThinkingWidget(false);
+        }
 
         // Get all AI units
         AIUnits.Empty();
@@ -163,11 +176,14 @@ void ASaT_RandomPlayer::OnTurn()
             EndTurn();
         }
     }
-
-    // Hide AI thinking widget at end of turn processing
     if (GameMode)
     {
-        GameMode->ShowAIThinkingWidget(false);
+        // Use a timer to ensure widget stays visible long enough
+        FTimerHandle HideWidgetTimer;
+        GetWorld()->GetTimerManager().SetTimer(HideWidgetTimer, [GameMode]()
+            {
+                GameMode->ShowAIThinkingWidget(false);
+            }, 0.5f, false);
     }
 }
 

@@ -242,6 +242,8 @@ void ASaT_GameMode::FlipCoinToDecideFirstPlayer()
 {
     UE_LOG(LogTemp, Warning, TEXT("===== FLIPPING COIN TO DECIDE FIRST PLAYER ====="));
 
+    ShowCoinFlipResultWidget(true);
+
     // Simple random 50/50 chance to determine who goes first
     bool bHumanWinsFlip = FMath::RandBool();
 
@@ -278,6 +280,26 @@ void ASaT_GameMode::FlipCoinToDecideFirstPlayer()
         GameInstance->bPlayerStartsFirst ? TEXT("TRUE (Human)") : TEXT("FALSE (AI)"),
         GameInstance->bIsPlayerTurn ? TEXT("TRUE (Human)") : TEXT("FALSE (AI)"),
         CurrentPlayer);
+
+    CoinflipResult = bHumanWinsFlip
+        ? FString::Printf(TEXT("YOU go first"))
+        : FString::Printf(TEXT("AI goes first"));
+
+    FTimerHandle HideWidgetTimerHandle;
+    GetWorldTimerManager().SetTimer(
+        HideWidgetTimerHandle,   // Timer handle
+        [this]()                 // Lambda function for hiding
+        {
+            // Ensure we're on the game thread
+            if (IsValid(this))
+            {
+                ShowCoinFlipResultWidget(false);
+            }
+        },
+        2.0f,                    // Delay in seconds
+        false                    // Do not loop
+    );
+
 }
 
 void ASaT_GameMode::StartFirstTurn()
@@ -838,22 +860,69 @@ FString ASaT_GameMode::GetFormattedGameLog() const
 
 void ASaT_GameMode::ShowAIThinkingWidget(bool bShow)
 {
-    // Create widget if not already created
+    APlayerController* PC = GetWorld()->GetFirstPlayerController();
+    if (!PC) return;
+
     if (!AIThinkingWidget && AIThinkingWidgetClass)
     {
-        AIThinkingWidget = CreateWidget<UUserWidget>(GetWorld(), AIThinkingWidgetClass);
+        AIThinkingWidget = CreateWidget<UUserWidget>(PC, AIThinkingWidgetClass);
     }
 
-    // Show or hide the widget
     if (AIThinkingWidget)
     {
         if (bShow)
         {
-            AIThinkingWidget->AddToViewport();
+            // Explicitly set visibility and add to viewport
+            AIThinkingWidget->SetVisibility(ESlateVisibility::Visible);
+
+            // Ensure it's not already in viewport before adding
+            if (!AIThinkingWidget->IsInViewport())
+            {
+                AIThinkingWidget->AddToViewport(999);
+            }
         }
         else
         {
+            AIThinkingWidget->SetVisibility(ESlateVisibility::Collapsed);
             AIThinkingWidget->RemoveFromParent();
         }
     }
+}
+
+void ASaT_GameMode::ShowCoinFlipResultWidget(bool bShow)
+{
+    APlayerController* PC = GetWorld()->GetFirstPlayerController();
+    if (!PC) return;
+
+    if (!CoinFlipResultWidget && CoinFlipResultWidgetClass)
+    {
+        CoinFlipResultWidget = CreateWidget<UUserWidget>(PC, CoinFlipResultWidgetClass);
+    }
+
+    if (CoinFlipResultWidget)
+    {
+        if (bShow)
+        {
+            // Explicitly set visibility and add to viewport
+            CoinFlipResultWidget->SetVisibility(ESlateVisibility::Visible);
+
+            // Ensure it's not already in viewport before adding
+            if (!CoinFlipResultWidget->IsInViewport())
+            {
+                CoinFlipResultWidget->AddToViewport(999);
+            }
+        }
+        else
+        {
+            // Explicitly remove from viewport and set to hidden
+            CoinFlipResultWidget->RemoveFromParent();
+            CoinFlipResultWidget->SetVisibility(ESlateVisibility::Collapsed);
+        }
+    }
+}
+
+void ASaT_GameMode::HideCoinFlipWidget()
+{
+    UE_LOG(LogTemp, Warning, TEXT("Hiding Coin Flip Result Widget"));
+    ShowCoinFlipResultWidget(false);
 }

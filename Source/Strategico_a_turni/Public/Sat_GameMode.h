@@ -177,6 +177,19 @@ public:
     // Method to show/hide the widget
     void ShowAIThinkingWidget(bool bShow);
 
+    UPROPERTY(BlueprintReadOnly, Category = "UI")
+    FString CoinflipResult;
+
+    UPROPERTY()
+    UUserWidget* CoinFlipResultWidget;
+
+    UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "UI")
+    TSubclassOf<UUserWidget> CoinFlipResultWidgetClass;
+
+    void HideCoinFlipWidget();
+
+    void ShowCoinFlipResultWidget(bool bShow);
+
 protected:
 
 	void InitializePlayers();
