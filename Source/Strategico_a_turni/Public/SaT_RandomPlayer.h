@@ -44,6 +44,8 @@ public:
     virtual void OnLose() override;
     void EndTurn();
 
+    void ProcessNextAIUnit();
+
 private:
     // References
     UPROPERTY()
@@ -57,8 +59,7 @@ private:
     bool FindRandomEmptyCell(int32& OutGridX, int32& OutGridY);
 
     // New methods for PLAYING phase AI
-    void FindAllAIUnits();
-    void ProcessNextAIUnit();
+    void FindAllAIUnits();;
     void ProcessUnitActions(AUnit* Unit);
     AUnit* FindAttackTarget(AUnit* AIUnit);
     void MoveTowardPlayerUnit(AUnit* AIUnit);

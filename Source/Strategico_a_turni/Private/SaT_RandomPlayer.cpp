@@ -435,66 +435,95 @@ void ASaT_RandomPlayer::ProcessUnitActions(AUnit* Unit)
         return;
     }
 
-    // Debug the unit properties
-    UE_LOG(LogTemp, Warning, TEXT("AI: Processing %s with Movement=%d, RangeAttack=%d, HP=%d"),
-        *Unit->GetName(), Unit->Movement, Unit->RangeAttack, Unit->Hp);
+    UE_LOG(LogTemp, Warning, TEXT("AI: Processing %s with Movement=%d, RangeAttack=%d, HP=%d, HasMoved=%s, HasAttacked=%s"),
+        *Unit->GetName(),
+        Unit->Movement,
+        Unit->RangeAttack,
+        Unit->Hp,
+        Unit->bHasMovedThisTurn ? TEXT("YES") : TEXT("NO"),
+        Unit->bHasAttackedThisTurn ? TEXT("YES") : TEXT("NO"));
 
-    // First, try to find and attack a player unit if in range
-    AUnit* PlayerTarget = FindAttackTarget(Unit);
+    // First check if we can attack without moving
+    AUnit* TargetWithoutMoving = FindAttackTarget(Unit);
 
-    // If we found a target, attack it
-    if (PlayerTarget)
+    // If we can attack now, do it
+    if (TargetWithoutMoving && !Unit->bHasAttackedThisTurn)
     {
-        UE_LOG(LogTemp, Warning, TEXT("AI: Unit %s is attacking player unit at (%d,%d)"),
-            *Unit->GetName(), PlayerTarget->GridX, PlayerTarget->GridY);
+        UE_LOG(LogTemp, Warning, TEXT("AI: %s attacking target at (%d,%d) without moving"),
+            *Unit->GetName(), TargetWithoutMoving->GridX, TargetWithoutMoving->GridY);
 
-        // Visual indication of target
-        if (GridManager)
-        {
-            // Highlight the target for visual feedback
-            GridManager->HighlightCell(PlayerTarget->GridX, PlayerTarget->GridY, true);
+        // Get target's HP before attack
+        int32 TargetHPBefore = TargetWithoutMoving->Hp;
 
-            // Schedule to clear the highlight after a delay
-            FTimerHandle ClearTimerHandle;
-            GetWorld()->GetTimerManager().SetTimer(ClearTimerHandle, [this, PlayerTarget]() {
-                if (GridManager && PlayerTarget)
-                {
-                    GridManager->HighlightCell(PlayerTarget->GridX, PlayerTarget->GridY, false);
-                }
-                }, 1.0f, false);
-        }
+        // Perform attack
+        Unit->Attack(TargetWithoutMoving);
 
-        // Perform the attack
-        Unit->Attack(PlayerTarget);
+        // Calculate actual damage by checking HP difference
+        int32 DamageDealt = TargetHPBefore - TargetWithoutMoving->Hp;
 
+        // Mark the unit as having attacked
+        Unit->bHasAttackedThisTurn = true;
+
+        // Log the attack
         AGameModeBase* GameModeBase = UGameplayStatics::GetGameMode(GetWorld());
         ASaT_GameMode* GameMode = Cast<ASaT_GameMode>(GameModeBase);
         if (GameMode)
         {
-            GameMode->UpdateGameHUD();
-
-            FString AttackerType = Cast<ASniper>(Unit) ? TEXT("Sniper") : TEXT("Brawler");
-            int32 TargetHpBefore = PlayerTarget->Hp;
-
-            Unit->Attack(PlayerTarget);
-
-            // Calculate damage dealt
-            int32 DamageDealt = TargetHpBefore - PlayerTarget->Hp;
-
+            FString UnitType = Cast<ASniper>(Unit) ? TEXT("Sniper") : TEXT("Brawler");
             GameMode->AddFormattedMoveToLog(
                 false, // IsPlayerUnit = false for AI units
-                AttackerType,
+                UnitType,
                 TEXT("Attack"),
-                FVector2D(Unit->GridX, Unit->GridY),
-                FVector2D(PlayerTarget->GridX, PlayerTarget->GridY),
-                DamageDealt
+                FVector2D(Unit->GridX, Unit->GridY), // Attack from position
+                FVector2D(TargetWithoutMoving->GridX, TargetWithoutMoving->GridY), // Target position
+                DamageDealt // Use the actual damage dealt
             );
         }
     }
-    // If no valid attack target, try to move toward a player unit
+    // If we can't attack now, try to move to get in range
     else if (!Unit->bHasMovedThisTurn)
     {
+        // Only move if we couldn't attack without moving
         MoveTowardPlayerUnit(Unit);
+
+        // After moving, try to attack if we haven't already
+        if (!Unit->bHasAttackedThisTurn)
+        {
+            AUnit* PlayerTarget = FindAttackTarget(Unit);
+            if (PlayerTarget)
+            {
+                UE_LOG(LogTemp, Warning, TEXT("AI: %s attacking target at (%d,%d) after moving"),
+                    *Unit->GetName(), PlayerTarget->GridX, PlayerTarget->GridY);
+
+                // Get target's HP before attack
+                int32 TargetHPBefore = PlayerTarget->Hp;
+
+                // Perform attack
+                Unit->Attack(PlayerTarget);
+
+                // Calculate actual damage by checking HP difference
+                int32 DamageDealt = TargetHPBefore - PlayerTarget->Hp;
+
+                // Mark the unit as having attacked
+                Unit->bHasAttackedThisTurn = true;
+
+                // Log the attack
+                AGameModeBase* GameModeBase = UGameplayStatics::GetGameMode(GetWorld());
+                ASaT_GameMode* GameMode = Cast<ASaT_GameMode>(GameModeBase);
+                if (GameMode)
+                {
+                    FString UnitType = Cast<ASniper>(Unit) ? TEXT("Sniper") : TEXT("Brawler");
+                    GameMode->AddFormattedMoveToLog(
+                        false, // IsPlayerUnit = false for AI units
+                        UnitType,
+                        TEXT("Attack"),
+                        FVector2D(Unit->GridX, Unit->GridY), // Attack from position
+                        FVector2D(PlayerTarget->GridX, PlayerTarget->GridY), // Target position
+                        DamageDealt // Use the actual damage dealt
+                    );
+                }
+            }
+        }
     }
 }
 
@@ -753,29 +782,6 @@ void ASaT_RandomPlayer::MoveTowardPlayerUnit(AUnit* AIUnit)
 
         // After moving, check if we can now attack
         AUnit* NewTarget = FindAttackTarget(AIUnit);
-        if (NewTarget)
-        {
-            UE_LOG(LogTemp, Warning, TEXT("AI: After moving, now attacking player unit at (%d,%d)"),
-                NewTarget->GridX, NewTarget->GridY);
-
-            // Visual indication of target
-            if (GridManager)
-            {
-                GridManager->HighlightCell(NewTarget->GridX, NewTarget->GridY, true);
-
-                // Schedule to clear the highlight
-                FTimerHandle ClearHighlightHandle;
-                GetWorld()->GetTimerManager().SetTimer(ClearHighlightHandle, [this, NewTarget]() {
-                    if (GridManager && NewTarget)
-                    {
-                        GridManager->HighlightCell(NewTarget->GridX, NewTarget->GridY, false);
-                    }
-                    }, 1.0f, false);
-            }
-
-            // Perform the attack
-            AIUnit->Attack(NewTarget);
-        }
     }
     else
     {

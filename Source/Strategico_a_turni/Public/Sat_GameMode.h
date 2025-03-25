@@ -184,7 +184,7 @@ public:
     UUserWidget* CoinFlipResultWidget;
 
     UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "UI")
-    TSubclassOf<UUserWidget> CoinFlipResultWidgetClass;
+    TSubclassOf<UUserWidget> CoinFlipResultWidgetClass;;
 
     void HideCoinFlipWidget();
 

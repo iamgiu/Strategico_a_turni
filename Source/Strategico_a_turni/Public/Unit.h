@@ -27,6 +27,9 @@ public:
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Team")
     bool bIsPlayerUnit;
 
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Unit State")
+    bool bHasAttackedThisTurn = false;
+
     // Reference to the material interface for the piece when is normal
     UPROPERTY(EditAnywhere, Category = "Materials")
     UMaterialInterface* BaseMaterial;
@@ -99,6 +102,10 @@ public:
     UPROPERTY(BlueprintReadOnly, Category = "Unit Info")
     FString UnitTypeDisplayName;
 
+    // Calculate damage with random range between min and max
+    UFUNCTION(BlueprintCallable, Category = "Combat")
+    int32 CalculateDamage() const;
+
 protected:
     // Called when the game starts or when spawned
     virtual void BeginPlay() override;
@@ -110,10 +117,6 @@ protected:
     // Position on the grid
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Unit")
     FVector2D UnitGridPosition;
-
-    // Calculate damage with random range between min and max
-    UFUNCTION(BlueprintCallable, Category = "Combat")
-    int32 CalculateDamage() const;
 
     // Check if target is within attack range
     UFUNCTION(BlueprintCallable, Category = "Combat")

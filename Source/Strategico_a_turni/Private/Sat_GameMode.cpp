@@ -487,15 +487,6 @@ void ASaT_GameMode::NotifyCurrentPlayerTurn()
     UE_LOG(LogTemp, Warning, TEXT("==== DEBUG: NotifyCurrentPlayerTurn ENTRY ===="));
     UE_LOG(LogTemp, Warning, TEXT("CurrentPlayer=%d, Players.Num()=%d"), CurrentPlayer, Players.Num());
 
-    // Print info about each player
-    for (int32 i = 0; i < Players.Num(); i++)
-    {
-        UE_LOG(LogTemp, Warning, TEXT("Player[%d]: IsMyTurn=%s, Type=%s"),
-            i,
-            Players[i]->IsMyTurn ? TEXT("TRUE") : TEXT("FALSE"),
-            Cast<ASaT_HumanPlayer>(Players[i]->_getUObject()) ? TEXT("Human") : TEXT("AI"));
-    }
-
     // Get the GameInstance
     USaT_GameInstance* GameInstance = Cast<USaT_GameInstance>(UGameplayStatics::GetGameInstance(GetWorld()));
     if (!GameInstance)
@@ -504,11 +495,28 @@ void ASaT_GameMode::NotifyCurrentPlayerTurn()
         return;
     }
 
-    // Reset movement flags for units of the current player
+    // Determine whose turn it is
+    bool bIsHumanTurn = GameInstance->bIsPlayerTurn;
+
+    // Reset movement and attack flags for units
     TArray<AActor*> AllUnits;
     UGameplayStatics::GetAllActorsOfClass(GetWorld(), AUnit::StaticClass(), AllUnits);
 
-    bool bIsHumanTurn = GameInstance->bIsPlayerTurn;
+    for (AActor* UnitActor : AllUnits)
+    {
+        AUnit* Unit = Cast<AUnit>(UnitActor);
+        if (Unit)
+        {
+            // Reset flags based on the unit's player type
+            if (Unit->bIsPlayerUnit == bIsHumanTurn)
+            {
+                Unit->bHasMovedThisTurn = false;
+                Unit->bHasAttackedThisTurn = false;
+
+                UE_LOG(LogTemp, Warning, TEXT("Reset flags for unit: %s"), *Unit->GetName());
+            }
+        }
+    }
 
     for (AActor* UnitActor : AllUnits)
     {

@@ -170,12 +170,21 @@ void AUnit::UnshowSelected()
 
 void AUnit::DamageTaken(int32 Damage)
 {
+    UE_LOG(LogTemp, Warning, TEXT("%s taking %d damage. Current HP: %d"),
+        *GetName(), Damage, Hp);
+
     // Reduce the HP by the damage amount
+    int32 PreviousHP = Hp;
     Hp = FMath::Max(0, Hp - Damage);
+
+    UE_LOG(LogTemp, Warning, TEXT("%s HP reduced from %d to %d"),
+        *GetName(), PreviousHP, Hp);
 
     // Check if unit is dead
     if (!IsAlive())
     {
+        UE_LOG(LogTemp, Warning, TEXT("%s has been killed!"), *GetName());
+
         // Destroy the actor after a delay to allow for death animations
         SetActorHiddenInGame(true);
         SetActorEnableCollision(false);
@@ -237,12 +246,14 @@ bool AUnit::Attack(AUnit* Target)
     // Make sure target is valid and alive
     if (!Target || !Target->IsAlive())
     {
+        UE_LOG(LogTemp, Warning, TEXT("Attack failed: Invalid or dead target"));
         return false;
     }
 
     // Check if target is in range
     if (!IsTargetInRange(Target))
     {
+        UE_LOG(LogTemp, Warning, TEXT("Attack failed: Target out of range"));
         return false;
     }
 
@@ -266,11 +277,15 @@ bool AUnit::IsTargetInRange(const AUnit* Target) const
 {
     if (!Target)
     {
+        UE_LOG(LogTemp, Warning, TEXT("Target is null in range check"));
         return false;
     }
 
     // Calculate Manhattan distance (grid-based)
     int32 Distance = FMath::Abs(Target->GridX - GridX) + FMath::Abs(Target->GridY - GridY);
+
+    UE_LOG(LogTemp, Warning, TEXT("%s checking range to %s. Distance: %d, Attack Range: %d"),
+        *GetName(), *Target->GetName(), Distance, RangeAttack);
 
     // Check if the target is within range
     return Distance <= RangeAttack;
