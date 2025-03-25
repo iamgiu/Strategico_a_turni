@@ -10,6 +10,7 @@
 #include "SaT_RandomPlayer.h"
 #include "SaT_GameInstance.h"
 #include "Blueprint/UserWidget.h"
+#include "Components/Button.h"
 #include "Kismet/GameplayStatics.h"
 
 ASaT_GameMode::ASaT_GameMode()
@@ -443,6 +444,12 @@ bool ASaT_GameMode::CheckGameOver()
 
             // Determine the winner
             bool bHumanWins = (AIUnitCount == 0);
+
+            // Set winner text for UI
+            WinnerText = bHumanWins ? TEXT("YOU WIN!") : TEXT("AI WINS!");
+
+            // Show the game over widget
+            ShowGameOverWidget(true);
 
             // Notify players of the result
             for (auto PlayerInterface : Players)
@@ -925,4 +932,184 @@ void ASaT_GameMode::HideCoinFlipWidget()
 {
     UE_LOG(LogTemp, Warning, TEXT("Hiding Coin Flip Result Widget"));
     ShowCoinFlipResultWidget(false);
+}
+
+void ASaT_GameMode::ShowGameOverWidget(bool bShow)
+{
+    APlayerController* PC = GetWorld()->GetFirstPlayerController();
+    if (!PC) return;
+
+    if (!GameOverWidget && GameOverWidgetClass)
+    {
+        GameOverWidget = CreateWidget<UUserWidget>(PC, GameOverWidgetClass);
+    }
+
+    if (GameOverWidget)
+    {
+        if (bShow)
+        {
+            // Explicitly set visibility and add to viewport
+            GameOverWidget->SetVisibility(ESlateVisibility::Visible);
+
+            // Ensure it's not already in viewport before adding
+            if (!GameOverWidget->IsInViewport())
+            {
+                GameOverWidget->AddToViewport(10000);
+            }
+
+            // Find the Reset button directly
+            UButton* ResetButton = Cast<UButton>(GameOverWidget->GetWidgetFromName(TEXT("ResetButton")));
+
+            if (ResetButton)
+            {
+                ResetButton->OnClicked.Clear(); // Clear any existing bindings
+                ResetButton->OnClicked.AddDynamic(this, &ASaT_GameMode::ResetGame);
+                UE_LOG(LogTemp, Warning, TEXT("Reset Button bound successfully"));
+            }
+            else
+            {
+                UE_LOG(LogTemp, Error, TEXT("Failed to find Reset button in widget!"));
+            }
+
+            // IMPORTANT: Use GameAndUI mode consistently
+            FInputModeGameAndUI InputMode;
+            InputMode.SetWidgetToFocus(GameOverWidget->TakeWidget());
+            InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+            PC->SetInputMode(InputMode);
+            PC->bShowMouseCursor = true;
+
+            UE_LOG(LogTemp, Warning, TEXT("Game Over widget set up with proper focus"));
+        }
+        else
+        {
+            GameOverWidget->RemoveFromParent();
+            GameOverWidget->SetVisibility(ESlateVisibility::Collapsed);
+        }
+    }
+    else
+    {
+        UE_LOG(LogTemp, Error, TEXT("Failed to create Game Over widget"));
+    }
+}
+
+void ASaT_GameMode::ResetGame()
+{
+    UE_LOG(LogTemp, Warning, TEXT("===== RESETTING GAME ====="));
+
+    // Ensure we have a valid GameInstance
+    USaT_GameInstance* GameInstance = Cast<USaT_GameInstance>(UGameplayStatics::GetGameInstance(GetWorld()));
+    if (!GameInstance)
+    {
+        UE_LOG(LogTemp, Error, TEXT("Cannot reset game: GameInstance not found!"));
+        return;
+    }
+
+    // Hide game over widget first
+    ShowGameOverWidget(false);
+
+    // Destroy ALL actors of relevant classes
+    TArray<AActor*> AllUnits, AllTiles;
+    UGameplayStatics::GetAllActorsOfClass(GetWorld(), AUnit::StaticClass(), AllUnits);
+    UGameplayStatics::GetAllActorsOfClass(GetWorld(), ATile::StaticClass(), AllTiles);
+
+    UE_LOG(LogTemp, Warning, TEXT("Destroying %d units and %d tiles"), AllUnits.Num(), AllTiles.Num());
+
+    // Destroy units
+    for (AActor* UnitActor : AllUnits)
+    {
+        if (UnitActor)
+        {
+            UnitActor->Destroy();
+        }
+    }
+
+    // Destroy tiles
+    for (AActor* TileActor : AllTiles)
+    {
+        if (TileActor)
+        {
+            TileActor->Destroy();
+        }
+    }
+
+    // Reset game state in GameInstance
+    GameInstance->CurrentPhase = EGamePhase::SETUP;
+    GameInstance->bIsPlayerTurn = true;  // Ensure it starts on player turn
+    GameInstance->bPlayerStartsFirst = true;  // Reset coin flip
+    GameInstance->HumanUnitsPlaced = 0;
+    GameInstance->AIUnitsPlaced = 0;
+    GameInstance->CurrentTurnNumber = 1;
+
+    // Clear any stored game data
+    GameLog.Empty();
+    RawMoveHistory.Empty();
+    CurrentlySelectedUnit = nullptr;
+
+    // Reset current player state
+    CurrentPlayer = 0;  // Start with human player
+    CurrentPlayerType = EPlayerType::Human;
+
+    // Re-initialize players
+    InitializePlayers();
+
+    // Find the human and AI players and reset their placement flags
+    for (auto PlayerInterface : Players)
+    {
+        // Reset for Human Player
+        ASaT_HumanPlayer* HumanPlayer = Cast<ASaT_HumanPlayer>(PlayerInterface->_getUObject());
+        if (HumanPlayer)
+        {
+            // Reset human player placement flags
+            HumanPlayer->PlacedUnitsCount = 0;
+            HumanPlayer->bHasPlacedSniper = false;
+            HumanPlayer->bHasPlacedBrawler = false;
+            HumanPlayer->UnitsToPlace = 2;
+
+            UE_LOG(LogTemp, Warning, TEXT("Reset Human Player placement flags"));
+        }
+
+        // Reset for AI Player
+        ASaT_RandomPlayer* RandomPlayer = Cast<ASaT_RandomPlayer>(PlayerInterface->_getUObject());
+        if (RandomPlayer)
+        {
+            // Reset AI player placement flags
+            RandomPlayer->PlacedUnitsCount = 0;
+
+            UE_LOG(LogTemp, Warning, TEXT("Reset AI Player placement flags"));
+        }
+    }
+
+    // Reset and regenerate the grid
+    if (Gmanager)
+    {
+        // Clear all data structures
+        Gmanager->ClearAllHighlights();
+        Gmanager->ClearPathHighlights();
+        Gmanager->TileArray.Empty();
+        Gmanager->TileMap.Empty();
+        Gmanager->HighlightedTiles.Empty();
+        Gmanager->PathTiles.Empty();
+
+        // Regenerate the grid
+        Gmanager->GenerateField();
+    }
+    else
+    {
+        UE_LOG(LogTemp, Error, TEXT("GridManager is NULL during game reset!"));
+    }
+
+    // Restart the game
+    StartGame();
+
+    // Force update of game HUD
+    UpdateGameHUD();
+
+    // Additional verification logging
+    UE_LOG(LogTemp, Warning, TEXT("Game Reset Verification:"));
+    UE_LOG(LogTemp, Warning, TEXT("Current Phase: %d"), GameInstance->GetGamePhase());
+    UE_LOG(LogTemp, Warning, TEXT("Is Player Turn: %s"), GameInstance->bIsPlayerTurn ? TEXT("TRUE") : TEXT("FALSE"));
+    UE_LOG(LogTemp, Warning, TEXT("Human Units Placed: %d"), GameInstance->HumanUnitsPlaced);
+    UE_LOG(LogTemp, Warning, TEXT("AI Units Placed: %d"), GameInstance->AIUnitsPlaced);
+
+    UE_LOG(LogTemp, Warning, TEXT("Game reset completed successfully"));
 }

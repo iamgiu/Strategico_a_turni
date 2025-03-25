@@ -54,10 +54,6 @@ public:
 	// Called when the game starts or when spawned
 	virtual void BeginPlay() override;
 
-	// remove all signs from the field
-	//UFUNCTION(BlueprintCallable)
-	//void ResetField();
-
 	// generate an empty game field
 	void GenerateField();
 

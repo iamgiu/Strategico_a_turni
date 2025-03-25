@@ -80,22 +80,6 @@ void AGridManager::BeginPlay()
 	}
 }
 
-//void AGridManager::ResetField()
-//{
-//	for (ATile* Obj : TileArray)
-//	{
-//		Obj->SetTileStatus(NOT_ASSIGNED, ETileStatus::EMPTY);
-//	}
-//
-	// send broadcast event to registered objects 
-//	OnResetEvent.Broadcast();
-
-//	A_GameMode* GameMode = Cast<ATTT_GameMode>(GetWorld()->GetAuthGameMode());
-//	GameMode->IsGameOver = false;
-//	GameMode->MoveCounter = 0;
-//	GameMode->ChoosePlayerAndStartGame();
-//}
-
 void AGridManager::GenerateField()
 {
 	// First, generate the basic grid without obstacles

@@ -170,6 +170,23 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Unit Selection")
     void DeselectCurrentUnit();
 
+    // Fase di gioco corrente
+    UPROPERTY(BlueprintReadOnly, Category = "Gameplay")
+    EGamePhase CurrentPhase;
+
+    // Numero di unità da piazzare
+    UPROPERTY(BlueprintReadOnly, Category = "Gameplay")
+    int32 UnitsToPlace;
+
+    UPROPERTY()
+    TArray<FVector2D> CurrentPath;
+
+    bool bHasPlacedSniper;
+    bool bHasPlacedBrawler;
+
+    UPROPERTY(BlueprintReadOnly, Category = "Gameplay")
+    bool IsMyTurn;
+
 protected:
     virtual void BeginPlay() override;
 
@@ -192,21 +209,4 @@ protected:
     // Riferimento al GridManager
     UPROPERTY(BlueprintReadOnly, Category = "References")
     AGridManager* GridManager;
-
-    // Fase di gioco corrente
-    UPROPERTY(BlueprintReadOnly, Category = "Gameplay")
-    EGamePhase CurrentPhase;
-
-    // Numero di unità da piazzare
-    UPROPERTY(BlueprintReadOnly, Category = "Gameplay")
-    int32 UnitsToPlace;
-
-    UPROPERTY()
-    TArray<FVector2D> CurrentPath;
-
-    bool bHasPlacedSniper;
-    bool bHasPlacedBrawler;
-
-    UPROPERTY(BlueprintReadOnly, Category = "Gameplay")
-    bool IsMyTurn;
 };

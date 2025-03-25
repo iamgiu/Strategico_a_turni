@@ -190,10 +190,26 @@ public:
 
     void ShowCoinFlipResultWidget(bool bShow);
 
+    void ShowGameOverWidget(bool bShow);
+
+    UFUNCTION(BlueprintCallable, Category = "Game")
+    void ResetGame();
+
 protected:
 
 	void InitializePlayers();
 
 	void NotifyCurrentPlayerTurn();
+
+private:
+    
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI", meta = (AllowPrivateAccess = "true"))
+    TSubclassOf<UUserWidget> GameOverWidgetClass;
+
+    UPROPERTY()
+    UUserWidget* GameOverWidget;
+
+    UPROPERTY(BlueprintReadOnly, Category = "UI", meta = (AllowPrivateAccess = "true"))
+    FString WinnerText;
 
 };
