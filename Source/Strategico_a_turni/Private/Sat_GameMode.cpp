@@ -19,6 +19,31 @@ ASaT_GameMode::ASaT_GameMode()
     CurrentPlayer = 0;
     bIsGameOver = false;
     CurrentPlayerType = EPlayerType::Human;
+
+    // UI Widget classes
+    static ConstructorHelpers::FClassFinder<UUserWidget> DefaultMainGameHUDClass(TEXT("/Game/UI/WBP_MainGameHUD"));
+    if (DefaultMainGameHUDClass.Succeeded())
+    {
+        MainGameHUDClass = DefaultMainGameHUDClass.Class;
+    }
+
+    static ConstructorHelpers::FClassFinder<UUserWidget> DefaultAIThinkingWidgetClass(TEXT("/Game/UI/WBP_AIThinking"));
+    if (DefaultAIThinkingWidgetClass.Succeeded())
+    {
+        AIThinkingWidgetClass = DefaultAIThinkingWidgetClass.Class;
+    }
+
+    static ConstructorHelpers::FClassFinder<UUserWidget> DefaultCoinFlipResultWidgetClass(TEXT("/Game/UI/WBP_CoinFlipResult"));
+    if (DefaultCoinFlipResultWidgetClass.Succeeded())
+    {
+        CoinFlipResultWidgetClass = DefaultCoinFlipResultWidgetClass.Class;
+    }
+
+    static ConstructorHelpers::FClassFinder<UUserWidget> DefaultGameOverWidgetClass(TEXT("/Game/UI/WBP_GameOver"));
+    if (DefaultGameOverWidgetClass.Succeeded())
+    {
+        GameOverWidgetClass = DefaultGameOverWidgetClass.Class;
+    }
 }
 
 void ASaT_GameMode::BeginPlay()
@@ -109,6 +134,112 @@ void ASaT_GameMode::BeginPlay()
                 GameHUD->AddToViewport();
             }
         }
+    }
+
+    ShowDifficultyWidget(true);
+
+}
+
+void ASaT_GameMode::ShowDifficultyWidget(bool bShow)
+{
+    APlayerController* PC = GetWorld()->GetFirstPlayerController();
+    if (!PC) return;
+
+    if (!DifficultyWidget && DifficultySelectionWidgetClass)
+    {
+        DifficultyWidget = CreateWidget<UUserWidget>(PC, DifficultySelectionWidgetClass);
+    }
+
+    if (DifficultyWidget)
+    {
+        if (bShow)
+        {
+            // Explicitly set visibility and add to viewport
+            DifficultyWidget->SetVisibility(ESlateVisibility::Visible);
+
+            // Ensure it's not already in viewport before adding
+            if (!DifficultyWidget->IsInViewport())
+            {
+                DifficultyWidget->AddToViewport(10000); // High Z-order to be above everything
+            }
+
+            // Find and bind the buttons
+            UButton* EasyButton = Cast<UButton>(DifficultyWidget->GetWidgetFromName(TEXT("EasyModeButton")));
+            UButton* HardButton = Cast<UButton>(DifficultyWidget->GetWidgetFromName(TEXT("HardModeButton")));
+
+            if (EasyButton)
+            {
+                EasyButton->OnClicked.Clear();
+                EasyButton->OnClicked.AddDynamic(this, &ASaT_GameMode::OnEasyModeSelected);
+                UE_LOG(LogTemp, Warning, TEXT("Easy Mode Button bound successfully"));
+            }
+            else
+            {
+                UE_LOG(LogTemp, Error, TEXT("Failed to find Easy Mode button in widget!"));
+            }
+
+            if (HardButton)
+            {
+                HardButton->OnClicked.Clear();
+                HardButton->OnClicked.AddDynamic(this, &ASaT_GameMode::OnHardModeSelected);
+                UE_LOG(LogTemp, Warning, TEXT("Hard Mode Button bound successfully"));
+            }
+            else
+            {
+                UE_LOG(LogTemp, Error, TEXT("Failed to find Hard Mode button in widget!"));
+            }
+
+            // Set input mode to UI mode
+            FInputModeUIOnly InputMode;
+            InputMode.SetWidgetToFocus(DifficultyWidget->TakeWidget());
+            InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+            PC->SetInputMode(InputMode);
+            PC->bShowMouseCursor = true;
+        }
+        else
+        {
+            // Hide widget
+            HideDifficultyWidget();
+        }
+    }
+}
+
+void ASaT_GameMode::HideDifficultyWidget()
+{
+    if (DifficultyWidget)
+    {
+        DifficultyWidget->RemoveFromParent();
+        DifficultyWidget = nullptr;
+
+        // Switch back to game input mode
+        APlayerController* PC = GetWorld()->GetFirstPlayerController();
+        if (PC)
+        {
+            FInputModeGameAndUI InputMode;
+            InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+            PC->SetInputMode(InputMode);
+            PC->bShowMouseCursor = true;
+        }
+    }
+}
+
+void ASaT_GameMode::OnEasyModeSelected()
+{
+    UE_LOG(LogTemp, Warning, TEXT("Easy Mode Selected"));
+    USaT_GameInstance* GameInstance = Cast<USaT_GameInstance>(UGameplayStatics::GetGameInstance(GetWorld()));
+    if (GameInstance)
+    {
+        GameInstance->SetupGameWithDifficulty(EAIDifficulty::EASY);
+    }
+}
+
+void ASaT_GameMode::OnHardModeSelected()
+{
+    UE_LOG(LogTemp, Warning, TEXT("Hard Mode Selected"));
+    USaT_GameInstance* GameInstance = Cast<USaT_GameInstance>(UGameplayStatics::GetGameInstance(GetWorld()));
+    if (GameInstance)
+    {
+        GameInstance->SetupGameWithDifficulty(EAIDifficulty::HARD);
     }
 }
 

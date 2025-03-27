@@ -20,15 +20,29 @@ public:
     // Sets default values for this pawn's properties
     ASaT_RandomPlayer();
 
-    // Riferimenti ai Blueprint delle unità
-    UPROPERTY(EditDefaultsOnly, Category = "Units")
+    // Existing properties
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Units")
     TSubclassOf<class ASniper> SniperClass;
 
-    UPROPERTY(EditDefaultsOnly, Category = "Units")
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Units")
     TSubclassOf<class ABrawler> BrawlerClass;
 
-    UPROPERTY()
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Game")
     int32 PlacedUnitsCount;
+
+    // References
+    UPROPERTY()
+    class AGridManager* GridManager;
+
+    UPROPERTY()
+    class USaT_GameInstance* GameInstance;
+
+    // Unit-related properties
+    UPROPERTY()
+    TArray<AUnit*> AIUnits;
+
+    UPROPERTY()
+    int32 CurrentUnitIndex;
 
 protected:
     // Called when the game starts or when spawned
@@ -38,37 +52,37 @@ public:
     // Called every frame
     virtual void Tick(float DeltaTime) override;
 
-    // ISaT_PlayerInterface implementation
+    // ISaT_PlayerInterface
     virtual void OnTurn() override;
     virtual void OnWin() override;
     virtual void OnLose() override;
+
+    // Game flow methods
     void EndTurn();
-
-    void ProcessNextAIUnit();
-
-private:
-    // References
-    UPROPERTY()
-    USaT_GameInstance* GameInstance;
-
-    UPROPERTY()
-    AGridManager* GridManager;
-
-    // AI methods
     void PlaceRandomUnit();
     bool FindRandomEmptyCell(int32& OutGridX, int32& OutGridY);
 
-    // New methods for PLAYING phase AI
-    void FindAllAIUnits();;
+    // AI behavior methods
+    void FindAllAIUnits();
+    void ProcessNextAIUnit();
     void ProcessUnitActions(AUnit* Unit);
     AUnit* FindAttackTarget(AUnit* AIUnit);
     void MoveTowardPlayerUnit(AUnit* AIUnit);
     AUnit* FindClosestPlayerUnit(AUnit* AIUnit);
+    FVector2D ReconstructPath(const TMap<FVector2D, FVector2D>& CameFrom,
+        FVector2D Current, FVector2D Start, int32 MaxSteps);
 
-    // Track AI units
-    UPROPERTY()
-    TArray<AUnit*> AIUnits;
 
-    // Current unit index for processing
-    int32 CurrentUnitIndex;
+    // Process unit actions with strategic behavior (Hard mode)
+    void ProcessUnitActionsStrategic(AUnit* Unit);
+
+    // Calculate Manhattan distance between two points
+    int32 ManhattanDistance(const FVector2D& A, const FVector2D& B);
+
+    // Methods for different AI difficulties
+    void ProcessUnitActionsRandom(AUnit* Unit);
+    AUnit* FindRandomAttackTarget(AUnit* AIUnit);
+    void MoveRandomly(AUnit* AIUnit);
+
+    bool IsPathClear(int32 StartX, int32 StartY, int32 EndX, int32 EndY);
 };

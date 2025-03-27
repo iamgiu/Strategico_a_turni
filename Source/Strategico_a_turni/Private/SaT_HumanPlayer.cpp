@@ -4,6 +4,7 @@
 #include "Components/SceneComponent.h"
 #include "Camera/CameraComponent.h"
 #include "GridManager.h"
+#include "Sat_GameMode.h"
 #include <Kismet/GameplayStatics.h>
 #include "Sniper.h"
 #include "Brawler.h"
@@ -252,7 +253,6 @@ void ASaT_HumanPlayer::OnTurn()
 
         if (CurrentPhase == EGamePhase::SETUP)
         {
-
             if (PlacedUnitsCount >= UnitsToPlace)
             {
                 UE_LOG(LogTemp, Warning, TEXT("Already placed all units (%d/%d). End your turn."),
@@ -276,16 +276,22 @@ void ASaT_HumanPlayer::OnTurn()
                 // Can place more units
                 UE_LOG(LogTemp, Warning, TEXT("Human player can place more units (%d/%d placed)"),
                     PlacedUnitsCount, UnitsToPlace);
+            }
 
-                // Make sure the end turn button is visible
-                ShowEndTurnButton();
+            // During SETUP phase, we don't want to show the End Turn button
+            // If it exists, remove it
+            if (EndTurnWidget)
+            {
+                EndTurnWidget->RemoveFromParent();
+                EndTurnWidget = nullptr;
+                UE_LOG(LogTemp, Warning, TEXT("End Turn button removed during SETUP phase"));
             }
         }
         else if (CurrentPhase == EGamePhase::PLAYING)
         {
             UE_LOG(LogTemp, Warning, TEXT("Human player turn in PLAYING phase"));
 
-            // Make sure the end turn button is visible for the playing phase
+            // Only show the end turn button during the PLAYING phase
             ShowEndTurnButton();
         }
     }
@@ -300,7 +306,6 @@ void ASaT_HumanPlayer::OnWin()
     // Implementation for when the player wins
     UE_LOG(LogTemp, Warning, TEXT("Human Player has won!"));
 
-    // You can add additional win logic here, like showing a victory UI
 }
 
 void ASaT_HumanPlayer::OnLose()
@@ -308,7 +313,6 @@ void ASaT_HumanPlayer::OnLose()
     // Implementation for when the player loses
     UE_LOG(LogTemp, Warning, TEXT("Human Player has lost!"));
 
-    // You can add additional loss logic here, like showing a defeat UI
 }
 
 
@@ -321,7 +325,6 @@ bool ASaT_HumanPlayer::HasPlacedAllUnits() const
 
 void ASaT_HumanPlayer::PlaceUnit(int32 GridX, int32 GridY, bool bIsSniper)
 {
-
     if (PlacedUnitsCount >= UnitsToPlace)
     {
         UE_LOG(LogTemp, Warning, TEXT("Cannot place more units - already placed maximum (%d/%d)"),
@@ -426,6 +429,11 @@ void ASaT_HumanPlayer::PlaceUnit(int32 GridX, int32 GridY, bool bIsSniper)
                 FVector2D(GridX, GridY)
             );
         }
+        // END TURN AUTOMATICALLY AFTER PLACING A UNIT
+        // This is the key fix - end turn immediately after placing a unit
+        // just like the AI player does
+        FTimerHandle TimerHandle;
+        GetWorld()->GetTimerManager().SetTimer(TimerHandle, this, &ASaT_HumanPlayer::EndTurn, 0.5f, false);
     }
 }
 
@@ -663,8 +671,12 @@ void ASaT_HumanPlayer::HandlePlayingPhaseClick(ATile* ClickedTile)
                     UE_LOG(LogTemp, Warning, TEXT("Moving unit from %d,%d to %d,%d"),
                         UnitToMove->GridX, UnitToMove->GridY, ClickedTile->GridX, ClickedTile->GridY);
 
-                    // Update grid - free old cell
-                    GridManager->OccupyCell(UnitToMove->GridX, UnitToMove->GridY, nullptr);
+                    // IMPORTANT: Save the old position
+                    int32 OldGridX = UnitToMove->GridX;
+                    int32 OldGridY = UnitToMove->GridY;
+
+                    // Update grid - free old cell FIRST
+                    GridManager->OccupyCell(OldGridX, OldGridY, nullptr);
 
                     // Update unit position
                     FVector NewLocation = GridManager->GetWorldLocationFromGrid(ClickedTile->GridX, ClickedTile->GridY);
@@ -691,14 +703,17 @@ void ASaT_HumanPlayer::HandlePlayingPhaseClick(ATile* ClickedTile)
                             FVector2D(CurrentPath[0].X, CurrentPath[0].Y), // Use first position in path as starting point
                             FVector2D(ClickedTile->GridX, ClickedTile->GridY)
                         );
-
                     }
 
                     UE_LOG(LogTemp, Warning, TEXT("Move successful!"));
 
                     // Reset move mode
                     bMoveMode = false;
-                    ClearAllHighlightsAndPaths();
+                    // Show the path for a while before clearing it
+                    FTimerHandle ClearPathTimer;
+                    GetWorld()->GetTimerManager().SetTimer(ClearPathTimer, [this]() {
+                        ClearAllHighlightsAndPaths();
+                    }, 5.0f, false);
 
                     // Show action widget again to allow attack after move
                     ShowMovementAndAttackWidget(UnitToMove);
@@ -710,7 +725,6 @@ void ASaT_HumanPlayer::HandlePlayingPhaseClick(ATile* ClickedTile)
 
                 // If clicked outside movement range, cancel move mode
                 bMoveMode = false;
-                ClearAllHighlightsAndPaths();
             }
         }
         else if (bAttackMode && SelectedUnit)
@@ -947,6 +961,14 @@ void ASaT_HumanPlayer::EndTurn()
         UnitSelectionWidget = nullptr;
     }
 
+    // Hide the End Turn button explicitly when ending turn
+    if (EndTurnWidget)
+    {
+        EndTurnWidget->RemoveFromParent();
+        EndTurnWidget = nullptr;
+        UE_LOG(LogTemp, Warning, TEXT("End Turn button removed at end of turn"));
+    }
+
     // Restore normal input mode
     APlayerController* PC = GetWorld()->GetFirstPlayerController();
     if (PC)
@@ -978,6 +1000,35 @@ void ASaT_HumanPlayer::EndTurn()
 
 void ASaT_HumanPlayer::ShowEndTurnButton()
 {
+    // Only show the End Turn button in the PLAYING phase and when it's the player's turn
+    if (!GameInstance)
+    {
+        GameInstance = Cast<USaT_GameInstance>(UGameplayStatics::GetGameInstance(GetWorld()));
+    }
+
+    // Check if it's in the playing phase and it's the player's turn
+    if (GameInstance)
+    {
+        EGamePhase CurrentGamePhase = GameInstance->GetGamePhase();
+        bool bIsPlayerTurn = GameInstance->bIsPlayerTurn;
+
+        // Only show the button during the PLAYING phase and when it's the player's turn
+        if (CurrentGamePhase != EGamePhase::PLAYING || !bIsPlayerTurn)
+        {
+            // Hide the button if it exists
+            if (EndTurnWidget)
+            {
+                EndTurnWidget->RemoveFromParent();
+                EndTurnWidget = nullptr;
+            }
+            UE_LOG(LogTemp, Warning, TEXT("End Turn button not shown: Phase = %s, IsPlayerTurn = %s"),
+                CurrentGamePhase == EGamePhase::SETUP ? TEXT("SETUP") :
+                CurrentGamePhase == EGamePhase::PLAYING ? TEXT("PLAYING") : TEXT("GAMEOVER"),
+                bIsPlayerTurn ? TEXT("TRUE") : TEXT("FALSE"));
+            return;
+        }
+    }
+
     UE_LOG(LogTemp, Warning, TEXT("ShowEndTurnButton called"));
 
     // Get player controller
@@ -1032,17 +1083,17 @@ void ASaT_HumanPlayer::ShowEndTurnButton()
     }
 }
 
-void ASaT_HumanPlayer::ShowMovementRange(AUnit* Unit)
+void ASaT_HumanPlayer::ShowMovementRange(AUnit * Unit)
 {
     if (!Unit || !GridManager)
     {
         return;
     }
 
-    // Clear only movement highlights, not path highlights
+    // Clear previous highlights
     GridManager->ClearAllHighlights();
 
-    // Get the unit's current position and movement range
+    // Get unit's current position and movement range
     int32 UnitX = Unit->GridX;
     int32 UnitY = Unit->GridY;
     int32 MovementRange = Unit->Movement;
@@ -1050,72 +1101,100 @@ void ASaT_HumanPlayer::ShowMovementRange(AUnit* Unit)
     UE_LOG(LogTemp, Warning, TEXT("Showing movement range for unit at (%d, %d) with range %d"),
         UnitX, UnitY, MovementRange);
 
-    // BFS to find all reachable cells within movement range
-    // Initialize visited array (25x25 grid)
-    bool Visited[25][25] = { false };
+    // Dijkstra's algorithm for finding reachable tiles
+    // Initialize distance array (distance from start position)
+    int32 Distance[25][25];
+    for (int32 x = 0; x < 25; x++)
+    {
+        for (int32 y = 0; y < 25; y++)
+        {
+            Distance[x][y] = INT_MAX; // "Infinity"
+        }
+    }
 
-    // Queue for BFS - stores positions and remaining movement
-    TQueue<TPair<FVector2D, int32>> Queue;
+    // Start position has distance 0
+    Distance[UnitX][UnitY] = 0;
 
-    // Start at unit position with full movement range
-    Queue.Enqueue(TPair<FVector2D, int32>(FVector2D(UnitX, UnitY), MovementRange));
-    Visited[UnitX][UnitY] = true;
+    // Priority queue for Dijkstra (using array as simple implementation)
+    TArray<TPair<int32, FVector2D>> Queue;
+    Queue.Add(TPair<int32, FVector2D>(0, FVector2D(UnitX, UnitY)));
 
-    // Direction vectors for the four cardinal directions
+    // Direction vectors for 4-way movement
     int32 dx[] = { 1, -1, 0, 0 };
     int32 dy[] = { 0, 0, 1, -1 };
 
-    // Track how many cells we highlight
-    int32 HighlightedCount = 0;
-
-    while (!Queue.IsEmpty())
+    while (Queue.Num() > 0)
     {
-        TPair<FVector2D, int32> Current;
-        Queue.Dequeue(Current);
-
-        FVector2D Pos = Current.Key;
-        int32 RemainingMovement = Current.Value;
-
-        int32 CurrX = FMath::FloorToInt(Pos.X);
-        int32 CurrY = FMath::FloorToInt(Pos.Y);
-
-        // Highlight the cell if it's not the unit's position
-        if (CurrX != UnitX || CurrY != UnitY)
+        // Find smallest distance node
+        int32 SmallestIdx = 0;
+        for (int32 i = 1; i < Queue.Num(); i++)
         {
-            GridManager->HighlightCell(CurrX, CurrY, true);
-            HighlightedCount++;
+            if (Queue[i].Key < Queue[SmallestIdx].Key)
+            {
+                SmallestIdx = i;
+            }
         }
 
-        // If no more movement left, don't explore further from this cell
-        if (RemainingMovement <= 0)
-        {
+        // Get and remove closest node
+        TPair<int32, FVector2D> Current = Queue[SmallestIdx];
+        Queue.RemoveAt(SmallestIdx);
+
+        int32 CurrentX = FMath::FloorToInt(Current.Value.X);
+        int32 CurrentY = FMath::FloorToInt(Current.Value.Y);
+        int32 CurrentDist = Current.Key;
+
+        // If we've exceeded movement range, don't process this node further
+        if (CurrentDist > MovementRange)
             continue;
-        }
 
         // Try all four directions
         for (int32 i = 0; i < 4; i++)
         {
-            int32 NewX = CurrX + dx[i];
-            int32 NewY = CurrY + dy[i];
+            int32 NewX = CurrentX + dx[i];
+            int32 NewY = CurrentY + dy[i];
 
-            // Check if new position is valid and not visited
-            if (GridManager->IsValidPosition(FVector2D(NewX, NewY)) && !Visited[NewX][NewY])
+            // Skip if invalid position
+            if (!GridManager->IsValidPosition(FVector2D(NewX, NewY)))
+                continue;
+
+            // Get the tile
+            ATile* Tile = nullptr;
+            if (GridManager->TileMap.Contains(FVector2D(NewX, NewY)))
+                Tile = GridManager->TileMap[FVector2D(NewX, NewY)];
+
+            // Skip if tile is an obstacle or occupied
+            if (!Tile || Tile->bIsObstacle || (Tile->bIsOccupied && !(NewX == UnitX && NewY == UnitY)))
+                continue;
+
+            // Cost to move to this tile is 1
+            int32 NewDist = CurrentDist + 1;
+
+            // If we found a shorter path, update distance
+            if (NewDist < Distance[NewX][NewY])
             {
-                // Check if the cell is not occupied (except by the unit itself)
-                bool bIsCellFree = !GridManager->IsCellOccupied(NewX, NewY) ||
-                    (NewX == UnitX && NewY == UnitY);
-
-                if (bIsCellFree)
-                {
-                    // Mark as visited and add to the queue with one less movement point
-                    Visited[NewX][NewY] = true;
-                    Queue.Enqueue(TPair<FVector2D, int32>(FVector2D(NewX, NewY), RemainingMovement - 1));
-                }
+                Distance[NewX][NewY] = NewDist;
+                Queue.Add(TPair<int32, FVector2D>(NewDist, FVector2D(NewX, NewY)));
             }
         }
     }
 
-    UE_LOG(LogTemp, Warning, TEXT("Movement range visualization complete: %d cells highlighted"), HighlightedCount);
+    // Highlight all reachable cells
+    int32 HighlightCount = 0;
+    for (int32 x = 0; x < 25; x++)
+    {
+        for (int32 y = 0; y < 25; y++)
+        {
+            if (Distance[x][y] <= MovementRange && Distance[x][y] > 0)
+            {
+                GridManager->HighlightCell(x, y, true);
+                HighlightCount++;
+                UE_LOG(LogTemp, Display, TEXT("Highlighting reachable cell at (%d, %d), distance: %d"),
+                    x, y, Distance[x][y]);
+            }
+        }
+    }
+
+    UE_LOG(LogTemp, Warning, TEXT("Highlighted %d cells within movement range"), HighlightCount);
 }
 
 bool ASaT_HumanPlayer::TryMoveUnit(AUnit* Unit, int32 TargetGridX, int32 TargetGridY)
@@ -1139,122 +1218,162 @@ bool ASaT_HumanPlayer::TryMoveUnit(AUnit* Unit, int32 TargetGridX, int32 TargetG
 
 void ASaT_HumanPlayer::CalculatePath(int32 StartX, int32 StartY, int32 EndX, int32 EndY)
 {
-    // Clear existing path array
+    // Clear existing path
     CurrentPath.Empty();
 
-    // Ensure GridManager is valid
     if (!GridManager)
     {
-        UE_LOG(LogTemp, Error, TEXT("GridManager is NULL in CalculatePath!"));
+        UE_LOG(LogTemp, Error, TEXT("GridManager is NULL in CalculatePath"));
         return;
     }
 
     UE_LOG(LogTemp, Warning, TEXT("Calculating path from (%d,%d) to (%d,%d)"),
         StartX, StartY, EndX, EndY);
 
-    // Always start with the source position
-    CurrentPath.Add(FVector2D(StartX, StartY));
-
-    // BFS approach to find the shortest path avoiding obstacles
-    TArray<FVector2D> CameFrom;
-    CameFrom.SetNumZeroed(25 * 25); // For a 25x25 grid, using 1D array
-    TArray<bool> Visited;
-    Visited.SetNumZeroed(25 * 25);
-
-    // Direction vectors for the four cardinal directions
-    int32 dx[] = { 1, -1, 0, 0 };
-    int32 dy[] = { 0, 0, 1, -1 };
-
-    TQueue<FVector2D> Queue;
-    Queue.Enqueue(FVector2D(StartX, StartY));
-    Visited[StartY * 25 + StartX] = true;
-
-    bool bFoundPath = false;
-
-    while (!Queue.IsEmpty() && !bFoundPath)
+    // Check if destination is valid
+    if (!GridManager->IsValidPosition(FVector2D(EndX, EndY)))
     {
-        FVector2D Current;
-        Queue.Dequeue(Current);
+        UE_LOG(LogTemp, Error, TEXT("Destination coordinates are outside the grid"));
+        return;
+    }
 
-        // Check if we reached the destination
-        if (FMath::FloorToInt(Current.X) == EndX && FMath::FloorToInt(Current.Y) == EndY)
+    ATile* DestTile = nullptr;
+    if (GridManager->TileMap.Contains(FVector2D(EndX, EndY)))
+    {
+        DestTile = GridManager->TileMap[FVector2D(EndX, EndY)];
+        if (DestTile && (DestTile->bIsObstacle || DestTile->bIsOccupied))
         {
-            bFoundPath = true;
-            break;
+            UE_LOG(LogTemp, Warning, TEXT("Destination is occupied or an obstacle"));
+            return;
+        }
+    }
+
+    // Setup Dijkstra's algorithm for pathfinding
+    int32 Distance[25][25];
+    FVector2D Previous[25][25];
+    bool Visited[25][25] = { false };
+
+    // Initialize distance array
+    for (int32 x = 0; x < 25; x++)
+    {
+        for (int32 y = 0; y < 25; y++)
+        {
+            Distance[x][y] = INT_MAX;
+            Previous[x][y] = FVector2D(-1, -1); // Invalid previous position
+        }
+    }
+
+    // Start position has distance 0
+    Distance[StartX][StartY] = 0;
+
+    // Direction vectors for 4-way movement (NESW)
+    int32 dx[] = { 0, 1, 0, -1 };
+    int32 dy[] = { -1, 0, 1, 0 };
+
+    // Dijkstra's algorithm
+    for (int32 i = 0; i < 25 * 25; i++) // Max iterations
+    {
+        // Find unvisited node with smallest distance
+        int32 MinDist = INT_MAX;
+        int32 MinX = -1, MinY = -1;
+
+        for (int32 x = 0; x < 25; x++)
+        {
+            for (int32 y = 0; y < 25; y++)
+            {
+                if (!Visited[x][y] && Distance[x][y] < MinDist)
+                {
+                    MinDist = Distance[x][y];
+                    MinX = x;
+                    MinY = y;
+                }
+            }
         }
 
+        // If no more nodes to process or we reached destination
+        if (MinX == -1 || (MinX == EndX && MinY == EndY))
+            break;
+
+        // Mark as visited
+        Visited[MinX][MinY] = true;
+
         // Try all four directions
-        for (int32 i = 0; i < 4; i++)
+        for (int32 dir = 0; dir < 4; dir++)
         {
-            int32 NewX = FMath::FloorToInt(Current.X) + dx[i];
-            int32 NewY = FMath::FloorToInt(Current.Y) + dy[i];
+            int32 NewX = MinX + dx[dir];
+            int32 NewY = MinY + dy[dir];
 
-            // Check if new position is valid and not visited
-            if (GridManager->IsValidPosition(FVector2D(NewX, NewY)) && !Visited[NewY * 25 + NewX])
+            // Skip if outside grid
+            if (!GridManager->IsValidPosition(FVector2D(NewX, NewY)))
+                continue;
+
+            // Skip if already visited
+            if (Visited[NewX][NewY])
+                continue;
+
+            // Skip obstacles
+            ATile* Tile = nullptr;
+            if (GridManager->TileMap.Contains(FVector2D(NewX, NewY)))
+                Tile = GridManager->TileMap[FVector2D(NewX, NewY)];
+
+            if (!Tile || Tile->bIsObstacle || (Tile->bIsOccupied && !(NewX == EndX && NewY == EndY)))
+                continue;
+
+            // Calculate new distance (cost is 1 per step)
+            int32 NewDist = Distance[MinX][MinY] + 1;
+
+            // If found shorter path
+            if (NewDist < Distance[NewX][NewY])
             {
-                // Check if the cell is not occupied (except for the destination)
-                bool bIsCellFree = !GridManager->IsCellOccupied(NewX, NewY) ||
-                    (NewX == EndX && NewY == EndY);
-
-                if (bIsCellFree)
-                {
-                    // Mark as visited
-                    Visited[NewY * 25 + NewX] = true;
-
-                    // Record where we came from
-                    CameFrom[NewY * 25 + NewX] = Current;
-
-                    // Add to queue
-                    Queue.Enqueue(FVector2D(NewX, NewY));
-                }
+                Distance[NewX][NewY] = NewDist;
+                Previous[NewX][NewY] = FVector2D(MinX, MinY);
             }
         }
     }
 
-    // If we found a path, reconstruct it
-    if (bFoundPath)
+    // Check if we found a path to the destination
+    if (Distance[EndX][EndY] == INT_MAX)
     {
-        // Clear the current path and add the destination
-        CurrentPath.Empty();
+        UE_LOG(LogTemp, Warning, TEXT("No path found to destination"));
 
-        // Start from the destination
-        FVector2D Current(EndX, EndY);
+        // Add start point for fallback visualization
+        CurrentPath.Add(FVector2D(StartX, StartY));
+        return;
+    }
 
-        // Build the path backwards
-        TArray<FVector2D> ReversePath;
-        ReversePath.Add(Current);
+    // Reconstruct path from end to start
+    TArray<FVector2D> ReversePath;
+    int32 CurrentX = EndX;
+    int32 CurrentY = EndY;
 
-        // Keep going until we reach the start
-        while (Current.X != StartX || Current.Y != StartY)
-        {
-            Current = CameFrom[FMath::FloorToInt(Current.Y) * 25 + FMath::FloorToInt(Current.X)];
-            ReversePath.Add(Current);
-        }
+    while (CurrentX != -1 && CurrentY != -1)
+    {
+        ReversePath.Add(FVector2D(CurrentX, CurrentY));
 
-        // Reverse the path to get the correct order
-        for (int32 i = ReversePath.Num() - 1; i >= 0; i--)
-        {
-            CurrentPath.Add(ReversePath[i]);
-        }
+        // If we reached the start
+        if (CurrentX == StartX && CurrentY == StartY)
+            break;
 
+        // Get previous position
+        FVector2D PrevPos = Previous[CurrentX][CurrentY];
+        CurrentX = FMath::FloorToInt(PrevPos.X);
+        CurrentY = FMath::FloorToInt(PrevPos.Y);
+    }
+
+    // Reverse to get start-to-end path
+    for (int32 i = ReversePath.Num() - 1; i >= 0; i--)
+    {
+        CurrentPath.Add(ReversePath[i]);
+    }
+
+    // Visualize the path
+    if (CurrentPath.Num() > 0 && GridManager)
+    {
+        GridManager->HighlightPath(CurrentPath, true);
         UE_LOG(LogTemp, Warning, TEXT("Found path with %d steps"), CurrentPath.Num());
     }
-    else
-    {
-        // Fallback to simple direct path if no valid path found
-        UE_LOG(LogTemp, Warning, TEXT("No valid path found, using direct path"));
 
-        CurrentPath.Empty();
-        CurrentPath.Add(FVector2D(StartX, StartY));
-        CurrentPath.Add(FVector2D(EndX, EndY));
-    }
-
-    // Display the path
-    if (GridManager)
-    {
-        // Use true to clear any existing path highlights
-        GridManager->HighlightPath(CurrentPath, true);
-    }
+    UE_LOG(LogTemp, Warning, TEXT("Path calculation complete - Found %d points in path"), CurrentPath.Num());
 }
 
 void ASaT_HumanPlayer::ClearPath()
@@ -1367,7 +1486,7 @@ bool ASaT_HumanPlayer::TryAttackUnit(AUnit* AttackingUnit, AUnit* TargetUnit)
     }
 
     // Check if attacking unit has already attacked this turn
-    if (UnitAttackedThisTurn.Contains(AttackingUnit) && UnitAttackedThisTurn[AttackingUnit])
+    if (AttackingUnit->bHasAttackedThisTurn)
     {
         UE_LOG(LogTemp, Warning, TEXT("Unit has already attacked this turn!"));
         return false;
@@ -1393,6 +1512,9 @@ bool ASaT_HumanPlayer::TryAttackUnit(AUnit* AttackingUnit, AUnit* TargetUnit)
 
         if (bAttackSuccess)
         {
+            // IMPORTANT: Mark the unit as having attacked this turn - this was missing!
+            AttackingUnit->bHasAttackedThisTurn = true;
+
             // Calculate damage dealt
             int32 DamageDealt = TargetHpBefore - TargetUnit->Hp;
 
@@ -1419,7 +1541,7 @@ bool ASaT_HumanPlayer::TryAttackUnit(AUnit* AttackingUnit, AUnit* TargetUnit)
     {
         UE_LOG(LogTemp, Warning, TEXT("Target is out of attack range!"));
     }
-    
+
     return false;
 }
 

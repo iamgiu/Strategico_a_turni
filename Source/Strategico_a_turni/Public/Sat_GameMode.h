@@ -195,6 +195,29 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Game")
     void ResetGame();
 
+    // Widget for difficulty selection
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI")
+    TSubclassOf<UUserWidget> DifficultySelectionWidgetClass;
+
+    // Instance of difficulty selection widget
+    UPROPERTY()
+    UUserWidget* DifficultyWidget;
+
+    // Show/hide difficulty widget
+    UFUNCTION(BlueprintCallable, Category = "UI")
+    void ShowDifficultyWidget(bool bShow);
+
+    // Hide difficulty widget
+    UFUNCTION(BlueprintCallable, Category = "UI")
+    void HideDifficultyWidget();
+
+    // Methods for difficulty selection buttons
+    UFUNCTION(BlueprintCallable, Category = "Game")
+    void OnEasyModeSelected();
+
+    UFUNCTION(BlueprintCallable, Category = "Game")
+    void OnHardModeSelected();
+
 protected:
 
 	void InitializePlayers();

@@ -251,8 +251,59 @@ void ASaT_RandomPlayer::PlaceRandomUnit()
 
         if (bFoundEmptyCell)
         {
-            // Determine which unit to place based on what's already placed
-            bool bIsSniper = (PlacedUnitsCount == 0); // First unit is Sniper, second is Brawler
+            // FIXED: Randomly choose between Sniper and Brawler, unless we already placed one
+            bool bHasPlacedSniper = false;
+            bool bHasPlacedBrawler = false;
+
+            // Check which units we've already placed
+            TArray<AActor*> AllUnits;
+            UGameplayStatics::GetAllActorsOfClass(GetWorld(), AUnit::StaticClass(), AllUnits);
+
+            for (AActor* UnitActor : AllUnits)
+            {
+                AUnit* Unit = Cast<AUnit>(UnitActor);
+                if (Unit && !Unit->bIsPlayerUnit) // Check AI units
+                {
+                    if (Cast<ASniper>(Unit))
+                    {
+                        bHasPlacedSniper = true;
+                    }
+                    else if (Cast<ABrawler>(Unit))
+                    {
+                        bHasPlacedBrawler = true;
+                    }
+                }
+            }
+
+            // Determine which unit to place
+            bool bIsSniper;
+
+            // If we haven't placed either, randomly choose
+            if (!bHasPlacedSniper && !bHasPlacedBrawler)
+            {
+                bIsSniper = (FMath::RandBool()); // 50% chance for either
+                UE_LOG(LogTemp, Warning, TEXT("AI: Randomly chose to place %s first"),
+                    bIsSniper ? TEXT("Sniper") : TEXT("Brawler"));
+            }
+            // If we've placed Sniper but not Brawler, place Brawler
+            else if (bHasPlacedSniper && !bHasPlacedBrawler)
+            {
+                bIsSniper = false;
+                UE_LOG(LogTemp, Warning, TEXT("AI: Already placed Sniper, placing Brawler"));
+            }
+            // If we've placed Brawler but not Sniper, place Sniper
+            else if (!bHasPlacedSniper && bHasPlacedBrawler)
+            {
+                bIsSniper = true;
+                UE_LOG(LogTemp, Warning, TEXT("AI: Already placed Brawler, placing Sniper"));
+            }
+            // Just in case both are already placed
+            else
+            {
+                UE_LOG(LogTemp, Error, TEXT("AI: Both unit types already placed! Should not reach here."));
+                EndTurn();
+                return;
+            }
 
             // Check if class references are valid
             if (bIsSniper && !SniperClass)
@@ -363,10 +414,20 @@ bool ASaT_RandomPlayer::FindRandomEmptyCell(int32& OutGridX, int32& OutGridY)
         OutGridX = FMath::RandRange(0, GridSize - 1);
         OutGridY = FMath::RandRange(0, GridSize - 1);
 
-        // Check if cell is free
+        // Double-check if cell is free from both occupation AND obstacles
         if (!GridManager->IsCellOccupied(OutGridX, OutGridY))
         {
-            return true;
+            // Additional obstacle check to be absolutely sure
+            ATile* Tile = nullptr;
+            if (GridManager->TileMap.Contains(FVector2D(OutGridX, OutGridY)))
+            {
+                Tile = GridManager->TileMap[FVector2D(OutGridX, OutGridY)];
+                if (Tile && !Tile->bIsObstacle && !Tile->bIsOccupied)
+                {
+                    // Triple check - this position is definitely valid
+                    return true;
+                }
+            }
         }
     }
 
@@ -429,106 +490,72 @@ void ASaT_RandomPlayer::ProcessNextAIUnit()
 // Process actions for a specific AI unit
 void ASaT_RandomPlayer::ProcessUnitActions(AUnit* Unit)
 {
-    if (!Unit || !Unit->IsAlive())
+    // Check the current difficulty setting
+    if (GameInstance && GameInstance->AIDifficulty == EAIDifficulty::EASY)
     {
-        UE_LOG(LogTemp, Warning, TEXT("AI: Unit is invalid or dead"));
-        return;
+        // Use random behavior for Easy mode
+        ProcessUnitActionsRandom(Unit);
     }
-
-    UE_LOG(LogTemp, Warning, TEXT("AI: Processing %s with Movement=%d, RangeAttack=%d, HP=%d, HasMoved=%s, HasAttacked=%s"),
-        *Unit->GetName(),
-        Unit->Movement,
-        Unit->RangeAttack,
-        Unit->Hp,
-        Unit->bHasMovedThisTurn ? TEXT("YES") : TEXT("NO"),
-        Unit->bHasAttackedThisTurn ? TEXT("YES") : TEXT("NO"));
-
-    // First check if we can attack without moving
-    AUnit* TargetWithoutMoving = FindAttackTarget(Unit);
-
-    // If we can attack now, do it
-    if (TargetWithoutMoving && !Unit->bHasAttackedThisTurn)
+    else
     {
-        UE_LOG(LogTemp, Warning, TEXT("AI: %s attacking target at (%d,%d) without moving"),
-            *Unit->GetName(), TargetWithoutMoving->GridX, TargetWithoutMoving->GridY);
-
-        // Get target's HP before attack
-        int32 TargetHPBefore = TargetWithoutMoving->Hp;
-
-        // Perform attack
-        Unit->Attack(TargetWithoutMoving);
-
-        // Calculate actual damage by checking HP difference
-        int32 DamageDealt = TargetHPBefore - TargetWithoutMoving->Hp;
-
-        // Mark the unit as having attacked
-        Unit->bHasAttackedThisTurn = true;
-
-        // Log the attack
-        AGameModeBase* GameModeBase = UGameplayStatics::GetGameMode(GetWorld());
-        ASaT_GameMode* GameMode = Cast<ASaT_GameMode>(GameModeBase);
-        if (GameMode)
-        {
-            FString UnitType = Cast<ASniper>(Unit) ? TEXT("Sniper") : TEXT("Brawler");
-            GameMode->AddFormattedMoveToLog(
-                false, // IsPlayerUnit = false for AI units
-                UnitType,
-                TEXT("Attack"),
-                FVector2D(Unit->GridX, Unit->GridY), // Attack from position
-                FVector2D(TargetWithoutMoving->GridX, TargetWithoutMoving->GridY), // Target position
-                DamageDealt // Use the actual damage dealt
-            );
-        }
+        // Use strategic A* pathfinding for Hard mode
+        ProcessUnitActionsStrategic(Unit);
     }
-    // If we can't attack now, try to move to get in range
-    else if (!Unit->bHasMovedThisTurn)
-    {
-        // Only move if we couldn't attack without moving
-        MoveTowardPlayerUnit(Unit);
+}
 
-        // After moving, try to attack if we haven't already
+// Process unit actions with random behavior (Easy mode)
+void ASaT_RandomPlayer::ProcessUnitActionsRandom(AUnit* Unit)
+{
+    // Random behavior for Easy AI:
+    // - Random chance to move or attack first
+    // - Random target selection
+    // - Random movement within range
+
+    // Check if we can attack first (50% chance)
+    bool bAttackFirst = FMath::RandBool();
+
+    if (bAttackFirst)
+    {
+        // Try attack first, then maybe move
         if (!Unit->bHasAttackedThisTurn)
         {
-            AUnit* PlayerTarget = FindAttackTarget(Unit);
-            if (PlayerTarget)
+            AUnit* Target = FindRandomAttackTarget(Unit);
+            if (Target)
             {
-                UE_LOG(LogTemp, Warning, TEXT("AI: %s attacking target at (%d,%d) after moving"),
-                    *Unit->GetName(), PlayerTarget->GridX, PlayerTarget->GridY);
+                // Attack logic
+                Unit->Attack(Target);
+            }
+        }
 
-                // Get target's HP before attack
-                int32 TargetHPBefore = PlayerTarget->Hp;
+        // Maybe move after attack (75% chance)
+        if (!Unit->bHasMovedThisTurn && FMath::RandRange(0, 3) > 0)
+        {
+            MoveRandomly(Unit);
+        }
+    }
+    else
+    {
+        // Move first, then maybe attack
+        if (!Unit->bHasMovedThisTurn)
+        {
+            MoveRandomly(Unit);
+        }
 
-                // Perform attack
-                Unit->Attack(PlayerTarget);
-
-                // Calculate actual damage by checking HP difference
-                int32 DamageDealt = TargetHPBefore - PlayerTarget->Hp;
-
-                // Mark the unit as having attacked
-                Unit->bHasAttackedThisTurn = true;
-
-                // Log the attack
-                AGameModeBase* GameModeBase = UGameplayStatics::GetGameMode(GetWorld());
-                ASaT_GameMode* GameMode = Cast<ASaT_GameMode>(GameModeBase);
-                if (GameMode)
-                {
-                    FString UnitType = Cast<ASniper>(Unit) ? TEXT("Sniper") : TEXT("Brawler");
-                    GameMode->AddFormattedMoveToLog(
-                        false, // IsPlayerUnit = false for AI units
-                        UnitType,
-                        TEXT("Attack"),
-                        FVector2D(Unit->GridX, Unit->GridY), // Attack from position
-                        FVector2D(PlayerTarget->GridX, PlayerTarget->GridY), // Target position
-                        DamageDealt // Use the actual damage dealt
-                    );
-                }
+        // Maybe attack after moving (75% chance)
+        if (!Unit->bHasAttackedThisTurn && FMath::RandRange(0, 3) > 0)
+        {
+            AUnit* Target = FindRandomAttackTarget(Unit);
+            if (Target)
+            {
+                // Attack logic
+                Unit->Attack(Target);
             }
         }
     }
 }
 
-// Find a player unit to attack if any are in range
-AUnit* ASaT_RandomPlayer::FindAttackTarget(AUnit* AIUnit)
+// Find a random attack target within range
+AUnit* ASaT_RandomPlayer::FindRandomAttackTarget(AUnit* AIUnit)
 {
     if (!AIUnit) return nullptr;
 
@@ -552,13 +579,297 @@ AUnit* ASaT_RandomPlayer::FindAttackTarget(AUnit* AIUnit)
             if (Distance <= AIUnit->RangeAttack)
             {
                 PotentialTargets.Add(PlayerUnit);
-                UE_LOG(LogTemp, Warning, TEXT("AI: Found potential target at (%d,%d), distance %d, range %d"),
+                UE_LOG(LogTemp, Warning, TEXT("Easy AI: Found potential target at (%d,%d), distance %d, range %d"),
                     PlayerUnit->GridX, PlayerUnit->GridY, Distance, AIUnit->RangeAttack);
             }
         }
     }
 
-    // If we have targets, select the weakest one (or random if same HP)
+    // If we have targets, select a random one
+    if (PotentialTargets.Num() > 0)
+    {
+        int32 RandomIndex = FMath::RandRange(0, PotentialTargets.Num() - 1);
+        return PotentialTargets[RandomIndex];
+    }
+
+    return nullptr;
+}
+
+// Move the unit to a random valid position
+void ASaT_RandomPlayer::MoveRandomly(AUnit* Unit)
+{
+    if (!Unit || !GridManager)
+    {
+        UE_LOG(LogTemp, Error, TEXT("MoveRandomly: Invalid Unit or GridManager"));
+        return;
+    }
+
+    // Unit has already moved
+    if (Unit->bHasMovedThisTurn)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("Unit %s has already moved this turn"), *Unit->GetName());
+        return;
+    }
+
+    // Get the unit's current position and movement range
+    int32 UnitX = Unit->GridX;
+    int32 UnitY = Unit->GridY;
+    int32 MovementRange = Unit->Movement;
+
+    // Store valid move options
+    TArray<FVector2D> ValidMoves;
+
+    // Collect potential moves within movement range
+    for (int32 X = UnitX - MovementRange; X <= UnitX + MovementRange; X++)
+    {
+        for (int32 Y = UnitY - MovementRange; Y <= UnitY + MovementRange; Y++)
+        {
+            // Skip if out of grid bounds
+            if (X < 0 || X >= 25 || Y < 0 || Y >= 25)
+                continue;
+
+            // Calculate Manhattan distance
+            int32 Distance = FMath::Abs(X - UnitX) + FMath::Abs(Y - UnitY);
+
+            // Check if within movement range
+            if (Distance <= MovementRange)
+            {
+                // Validate the entire path between current position and target
+                bool bPathClear = IsPathClear(UnitX, UnitY, X, Y);
+
+                if (bPathClear && !GridManager->IsCellOccupied(X, Y))
+                {
+                    ValidMoves.Add(FVector2D(X, Y));
+                }
+            }
+        }
+    }
+
+    // No valid moves found
+    if (ValidMoves.Num() == 0)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("No valid moves found for unit %s"), *Unit->GetName());
+        return;
+    }
+
+    // Randomly select a move from valid options
+    int32 RandomIndex = FMath::RandRange(0, ValidMoves.Num() - 1);
+    FVector2D SelectedMove = ValidMoves[RandomIndex];
+
+    // Perform the move
+    int32 NewGridX = FMath::FloorToInt(SelectedMove.X);
+    int32 NewGridY = FMath::FloorToInt(SelectedMove.Y);
+
+    // Save old position
+    int32 OldGridX = Unit->GridX;
+    int32 OldGridY = Unit->GridY;
+
+    // Free the current cell
+    GridManager->OccupyCell(OldGridX, OldGridY, nullptr);
+
+    // Update unit position
+    FVector NewLocation = GridManager->GetWorldLocationFromGrid(NewGridX, NewGridY);
+    Unit->GridX = NewGridX;
+    Unit->GridY = NewGridY;
+    Unit->SetActorLocation(NewLocation);
+
+    // Mark the unit as moved
+    Unit->bHasMovedThisTurn = true;
+
+    // Occupy the new cell
+    GridManager->OccupyCell(Unit->GridX, Unit->GridY, Unit);
+
+    // Prepare and highlight path
+    TArray<FVector2D> MovePath;
+    MovePath.Add(FVector2D(OldGridX, OldGridY));
+    MovePath.Add(SelectedMove);
+
+    GridManager->HighlightPath(MovePath, true);
+
+    // Log the move
+    AGameModeBase* GameModeBase = UGameplayStatics::GetGameMode(GetWorld());
+    ASaT_GameMode* GameMode = Cast<ASaT_GameMode>(GameModeBase);
+    if (GameMode)
+    {
+        FString UnitType = Cast<ASniper>(Unit) ? TEXT("Sniper") : TEXT("Brawler");
+        GameMode->AddFormattedMoveToLog(
+            false,
+            UnitType,
+            TEXT("Move"),
+            FVector2D(OldGridX, OldGridY),
+            FVector2D(Unit->GridX, Unit->GridY)
+        );
+    }
+}
+
+// Helper method to validate the entire path
+bool ASaT_RandomPlayer::IsPathClear(int32 StartX, int32 StartY, int32 EndX, int32 EndY)
+{
+    // Determine movement direction
+    int32 DeltaX = EndX - StartX;
+    int32 DeltaY = EndY - StartY;
+
+    // First, check horizontal movement
+    if (DeltaX != 0)
+    {
+        int32 XStep = (DeltaX > 0) ? 1 : -1;
+        for (int32 X = StartX + XStep; X != EndX; X += XStep)
+        {
+            if (GridManager->IsCellOccupied(X, StartY))
+            {
+                UE_LOG(LogTemp, Warning, TEXT("Path blocked horizontally at (%d,%d)"), X, StartY);
+                return false;
+            }
+        }
+    }
+
+    // Then, check vertical movement
+    if (DeltaY != 0)
+    {
+        int32 YStep = (DeltaY > 0) ? 1 : -1;
+        for (int32 Y = StartY + YStep; Y != EndY; Y += YStep)
+        {
+            if (GridManager->IsCellOccupied(EndX, Y))
+            {
+                UE_LOG(LogTemp, Warning, TEXT("Path blocked vertically at (%d,%d)"), EndX, Y);
+                return false;
+            }
+        }
+    }
+
+    // Final destination check
+    if (GridManager->IsCellOccupied(EndX, EndY))
+    {
+        UE_LOG(LogTemp, Warning, TEXT("Destination tile (%d,%d) is occupied"), EndX, EndY);
+        return false;
+    }
+
+    return true;
+}
+
+void ASaT_RandomPlayer::ProcessUnitActionsStrategic(AUnit* Unit)
+{
+    if (!Unit || !Unit->IsAlive())
+    {
+        UE_LOG(LogTemp, Warning, TEXT("AI: Unit is invalid or dead"));
+        return;
+    }
+
+    UE_LOG(LogTemp, Warning, TEXT("AI: Processing strategic move for %s with Movement=%d, RangeAttack=%d"),
+        *Unit->GetName(), Unit->Movement, Unit->RangeAttack);
+
+    // First try to attack without moving
+    AUnit* TargetWithoutMoving = FindAttackTarget(Unit);
+
+    // If we can attack now, do it
+    if (TargetWithoutMoving && !Unit->bHasAttackedThisTurn)
+    {
+        // Get target's HP before attack
+        int32 TargetHPBefore = TargetWithoutMoving->Hp;
+
+        // Perform attack
+        Unit->Attack(TargetWithoutMoving);
+
+        // Calculate actual damage by checking HP difference
+        int32 DamageDealt = TargetHPBefore - TargetWithoutMoving->Hp;
+
+        // Log the attack
+        AGameModeBase* GameModeBase = UGameplayStatics::GetGameMode(GetWorld());
+        ASaT_GameMode* GameMode = Cast<ASaT_GameMode>(GameModeBase);
+        if (GameMode)
+        {
+            FString UnitType = Cast<ASniper>(Unit) ? TEXT("Sniper") : TEXT("Brawler");
+            GameMode->AddFormattedMoveToLog(
+                false, // IsPlayerUnit = false for AI units
+                UnitType,
+                TEXT("Attack"),
+                FVector2D(Unit->GridX, Unit->GridY), // Attack from position
+                FVector2D(TargetWithoutMoving->GridX, TargetWithoutMoving->GridY), // Target position
+                DamageDealt
+            );
+        }
+    }
+    // If we can't attack now but haven't moved yet, move strategically toward a player unit
+    else if (!Unit->bHasMovedThisTurn)
+    {
+        // Use A* pathing to move toward a player unit
+        MoveTowardPlayerUnit(Unit);
+
+        // After moving, check if we can attack
+        if (!Unit->bHasAttackedThisTurn)
+        {
+            // Try to find a new target after moving
+            AUnit* TargetAfterMoving = FindAttackTarget(Unit);
+            if (TargetAfterMoving)
+            {
+                // Get target's HP before attack
+                int32 TargetHPBefore = TargetAfterMoving->Hp;
+
+                // Perform attack
+                Unit->Attack(TargetAfterMoving);
+
+                // Calculate actual damage by checking HP difference
+                int32 DamageDealt = TargetHPBefore - TargetAfterMoving->Hp;
+
+                // Log the attack
+                AGameModeBase* GameModeBase = UGameplayStatics::GetGameMode(GetWorld());
+                ASaT_GameMode* GameMode = Cast<ASaT_GameMode>(GameModeBase);
+                if (GameMode)
+                {
+                    FString UnitType = Cast<ASniper>(Unit) ? TEXT("Sniper") : TEXT("Brawler");
+                    GameMode->AddFormattedMoveToLog(
+                        false, // IsPlayerUnit = false for AI units
+                        UnitType,
+                        TEXT("Attack"),
+                        FVector2D(Unit->GridX, Unit->GridY), // Attack from position
+                        FVector2D(TargetAfterMoving->GridX, TargetAfterMoving->GridY), // Target position
+                        DamageDealt
+                    );
+                }
+            }
+        }
+    }
+}
+
+// Calculate Manhattan distance between two points
+int32 ASaT_RandomPlayer::ManhattanDistance(const FVector2D& A, const FVector2D& B)
+{
+    return FMath::Abs(FMath::FloorToInt(A.X) - FMath::FloorToInt(B.X)) +
+        FMath::Abs(FMath::FloorToInt(A.Y) - FMath::FloorToInt(B.Y));
+}
+
+// Find a player unit to attack if any are in range
+AUnit* ASaT_RandomPlayer::FindAttackTarget(AUnit* AIUnit)
+{
+    if (!AIUnit) return nullptr;
+
+    // Get all player units
+    TArray<AActor*> AllUnits;
+    UGameplayStatics::GetAllActorsOfClass(GetWorld(), AUnit::StaticClass(), AllUnits);
+
+    // Find player units in attack range, prioritizing the weakest ones
+    TArray<AUnit*> PotentialTargets;
+
+    for (AActor* UnitActor : AllUnits)
+    {
+        AUnit* PlayerUnit = Cast<AUnit>(UnitActor);
+        if (PlayerUnit && PlayerUnit->bIsPlayerUnit && PlayerUnit->IsAlive())
+        {
+            // Calculate Manhattan distance
+            int32 Distance = FMath::Abs(PlayerUnit->GridX - AIUnit->GridX) +
+                FMath::Abs(PlayerUnit->GridY - AIUnit->GridY);
+
+            // Check if within attack range
+            if (Distance <= AIUnit->RangeAttack)
+            {
+                PotentialTargets.Add(PlayerUnit);
+                UE_LOG(LogTemp, Warning, TEXT("AI: Found potential target at (%d,%d), HP: %d, distance: %d"),
+                    PlayerUnit->GridX, PlayerUnit->GridY, PlayerUnit->Hp, Distance);
+            }
+        }
+    }
+
+    // If we have targets, prioritize the weakest one
     if (PotentialTargets.Num() > 0)
     {
         // Sort by HP (weakest first)
@@ -566,227 +877,11 @@ AUnit* ASaT_RandomPlayer::FindAttackTarget(AUnit* AIUnit)
             return A.Hp < B.Hp;
             });
 
+        // Return the weakest unit
         return PotentialTargets[0];
     }
 
     return nullptr;
-}
-
-// Move the AI unit toward the closest player unit
-void ASaT_RandomPlayer::MoveTowardPlayerUnit(AUnit* AIUnit)
-{
-    if (!AIUnit || !GridManager) return;
-
-    // First, check if unit has already moved this turn
-    if (AIUnit->bHasMovedThisTurn)
-    {
-        UE_LOG(LogTemp, Warning, TEXT("AI: Unit %s has already moved this turn"), *AIUnit->GetName());
-        return;
-    }
-
-    // Find closest player unit
-    AUnit* ClosestUnit = FindClosestPlayerUnit(AIUnit);
-
-    if (!ClosestUnit)
-    {
-        UE_LOG(LogTemp, Warning, TEXT("AI: No player units found to move toward"));
-        return;
-    }
-
-    UE_LOG(LogTemp, Warning, TEXT("AI: Unit %s with movement range %d attempting to move toward player unit at (%d,%d)"),
-        *AIUnit->GetName(), AIUnit->Movement, ClosestUnit->GridX, ClosestUnit->GridY);
-
-    // Get the unit's movement range - ensure we're using the correct value
-    int32 MovementRange = AIUnit->Movement;
-    UE_LOG(LogTemp, Warning, TEXT("AI: Unit movement range is %d"), MovementRange);
-
-    // Store valid move options
-    struct FMoveOption
-    {
-        int32 X;
-        int32 Y;
-        int32 DistanceToTarget;
-    };
-
-    TArray<FMoveOption> ValidMoves;
-
-    // Check all cells within movement range using BFS
-    TArray<bool> Visited;
-    Visited.SetNumZeroed(25 * 25); // For a 25x25 grid
-
-    TQueue<FMoveOption> Queue;
-    Queue.Enqueue(FMoveOption{ AIUnit->GridX, AIUnit->GridY, 0 });
-    Visited[AIUnit->GridY * 25 + AIUnit->GridX] = true;
-
-    // Direction vectors for the four cardinal directions
-    int32 dx[] = { 1, -1, 0, 0 };
-    int32 dy[] = { 0, 0, 1, -1 };
-
-    while (!Queue.IsEmpty())
-    {
-        FMoveOption Current;
-        Queue.Dequeue(Current);
-
-        // Skip the starting position
-        if (Current.X != AIUnit->GridX || Current.Y != AIUnit->GridY)
-        {
-            // Calculate distance to target from this position
-            int32 DistToTarget = FMath::Abs(Current.X - ClosestUnit->GridX) +
-                FMath::Abs(Current.Y - ClosestUnit->GridY);
-
-            // Add this position as a valid move
-            Current.DistanceToTarget = DistToTarget;
-            ValidMoves.Add(Current);
-        }
-
-        // Don't explore further if we've used all movement
-        if (Current.DistanceToTarget >= MovementRange)
-            continue;
-
-        // Try all four directions
-        for (int32 i = 0; i < 4; i++)
-        {
-            int32 NewX = Current.X + dx[i];
-            int32 NewY = Current.Y + dy[i];
-
-            // Check if new position is valid and not visited
-            if (NewX >= 0 && NewX < 25 && NewY >= 0 && NewY < 25 &&
-                !Visited[NewY * 25 + NewX] && !GridManager->IsCellOccupied(NewX, NewY))
-            {
-                Visited[NewY * 25 + NewX] = true;
-                Queue.Enqueue(FMoveOption{ NewX, NewY, Current.DistanceToTarget + 1 });
-            }
-        }
-    }
-
-    // Display all valid moves (for debugging)
-    UE_LOG(LogTemp, Warning, TEXT("AI: Found %d valid moves within range %d"), ValidMoves.Num(), MovementRange);
-
-    // Find the best move - closest to the target unit
-    FMoveOption BestMove{ AIUnit->GridX, AIUnit->GridY, INT_MAX };
-    bool bFoundMove = false;
-
-    for (const FMoveOption& Move : ValidMoves)
-    {
-        // Skip the starting position
-        if (Move.X == AIUnit->GridX && Move.Y == AIUnit->GridY)
-            continue;
-
-        // Calculate distance from this position to the target
-        int32 DistToTarget = FMath::Abs(Move.X - ClosestUnit->GridX) +
-            FMath::Abs(Move.Y - ClosestUnit->GridY);
-
-        // Check if this move gets us closer to the target
-        if (DistToTarget < BestMove.DistanceToTarget)
-        {
-            BestMove = Move;
-            bFoundMove = true;
-        }
-    }
-
-    // If we found a valid move, execute it
-    if (bFoundMove)
-    {
-        UE_LOG(LogTemp, Warning, TEXT("AI: Best move found at (%d,%d), distance to target: %d"),
-            BestMove.X, BestMove.Y, BestMove.DistanceToTarget);
-
-        // Create a detailed path for visualization
-        TArray<FVector2D> Path;
-
-        // Always add the starting position
-        Path.Add(FVector2D(AIUnit->GridX, AIUnit->GridY));
-
-        // Initialize current position trackers
-        int32 CurrentX = AIUnit->GridX;
-        int32 CurrentY = AIUnit->GridY;
-
-        // Create a path from start to destination, showing each step
-        // First move horizontally to align X coordinate
-        while (CurrentX != BestMove.X)
-        {
-            // Move one cell at a time in the right direction
-            CurrentX += (CurrentX < BestMove.X) ? 1 : -1;
-
-            // Skip adding this point if it's occupied (except for destination)
-            if (!GridManager->IsCellOccupied(CurrentX, CurrentY) ||
-                (CurrentX == BestMove.X && CurrentY == BestMove.Y))
-            {
-                Path.Add(FVector2D(CurrentX, CurrentY));
-            }
-        }
-
-        // Then move vertically to align Y coordinate
-        while (CurrentY != BestMove.Y)
-        {
-            // Move one cell at a time in the right direction
-            CurrentY += (CurrentY < BestMove.Y) ? 1 : -1;
-
-            // Skip adding this point if it's occupied (except for destination)
-            if (!GridManager->IsCellOccupied(CurrentX, CurrentY) ||
-                (CurrentX == BestMove.X && CurrentY == BestMove.Y))
-            {
-                Path.Add(FVector2D(CurrentX, CurrentY));
-            }
-        }
-
-        // Visualize the complete path
-        if (GridManager && Path.Num() > 1)
-        {
-            UE_LOG(LogTemp, Warning, TEXT("AI: Visualizing path with %d points"), Path.Num());
-
-            // Highlight the path
-            GridManager->HighlightPath(Path, true);
-
-            // Schedule to clear the path highlight after a delay
-            FTimerHandle ClearPathHandle;
-            GetWorld()->GetTimerManager().SetTimer(ClearPathHandle, [this]() {
-                if (GridManager)
-                {
-                    GridManager->ClearPathHighlights();
-                }
-                }, 2.0f, false); // Show the path for 2 seconds for better visibility
-        }
-
-        // Free the current cell before moving
-        GridManager->OccupyCell(AIUnit->GridX, AIUnit->GridY, nullptr);
-
-        // Move the unit
-        UE_LOG(LogTemp, Warning, TEXT("AI: Moving unit from (%d,%d) to (%d,%d)"),
-            AIUnit->GridX, AIUnit->GridY, BestMove.X, BestMove.Y);
-
-        // Update the grid position
-        FVector NewLocation = GridManager->GetWorldLocationFromGrid(BestMove.X, BestMove.Y);
-        AIUnit->GridX = BestMove.X;
-        AIUnit->GridY = BestMove.Y;
-        AIUnit->SetActorLocation(NewLocation);
-
-        // Mark the unit as moved
-        AIUnit->bHasMovedThisTurn = true;
-
-        // Mark new cell as occupied
-        GridManager->OccupyCell(BestMove.X, BestMove.Y, AIUnit);
-
-        AGameModeBase* GameModeBase = UGameplayStatics::GetGameMode(GetWorld());
-        ASaT_GameMode* GameMode = Cast<ASaT_GameMode>(GameModeBase);
-        if (GameMode)
-        {
-            FString UnitType = Cast<ASniper>(AIUnit) ? TEXT("Sniper") : TEXT("Brawler");
-            GameMode->AddFormattedMoveToLog(
-                false, // IsPlayerUnit = false for AI units
-                UnitType,
-                TEXT("Move"),
-                FVector2D(Path[0].X, Path[0].Y), // Starting position
-                FVector2D(BestMove.X, BestMove.Y) // Destination position
-            );
-        }
-
-        // After moving, check if we can now attack
-        AUnit* NewTarget = FindAttackTarget(AIUnit);
-    }
-    else
-    {
-        UE_LOG(LogTemp, Warning, TEXT("AI: Could not find a valid move for unit"));
-    }
 }
 
 // Find the closest player unit to the given AI unit
@@ -819,6 +914,231 @@ AUnit* ASaT_RandomPlayer::FindClosestPlayerUnit(AUnit* AIUnit)
     }
 
     return ClosestUnit;
+}
+
+// Move the AI unit toward the closest player unit using A* pathfinding
+void ASaT_RandomPlayer::MoveTowardPlayerUnit(AUnit* AIUnit)
+{
+    if (!AIUnit || !GridManager) return;
+
+    // Find closest player unit
+    AUnit* ClosestUnit = FindClosestPlayerUnit(AIUnit);
+    if (!ClosestUnit)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("AI: No player units found to move toward"));
+        return;
+    }
+
+    // Get the unit's movement range
+    int32 MovementRange = AIUnit->Movement;
+
+    // Find best move using A* pathfinding
+    // Initialize data structures for A* algorithm
+    TArray<FVector2D> ClosedSet;
+    TArray<FVector2D> OpenSet;
+    TMap<FVector2D, FVector2D> CameFrom;
+    TMap<FVector2D, int32> GScore;
+    TMap<FVector2D, int32> FScore;
+
+    // Direction vectors for the four cardinal directions
+    int32 dx[] = { 1, -1, 0, 0 };
+    int32 dy[] = { 0, 0, 1, -1 };
+
+    // Start position
+    FVector2D Start(AIUnit->GridX, AIUnit->GridY);
+    // Target position
+    FVector2D Target(ClosestUnit->GridX, ClosestUnit->GridY);
+
+    // Initialize A* parameters
+    OpenSet.Add(Start);
+    GScore.Add(Start, 0);
+    FScore.Add(Start, ManhattanDistance(Start, Target));
+
+    // Best move found so far
+    FVector2D BestMove = Start;
+    int32 BestDistanceToTarget = ManhattanDistance(Start, Target);
+    bool bFoundPath = false;
+
+    // A* main loop - find a path toward the target, limited by movement range
+    while (OpenSet.Num() > 0)
+    {
+        // Find node with lowest F score
+        FVector2D Current = OpenSet[0];
+        int32 LowestFScore = FScore[Current];
+        int32 CurrentIndex = 0;
+
+        for (int32 i = 1; i < OpenSet.Num(); i++)
+        {
+            if (FScore[OpenSet[i]] < LowestFScore)
+            {
+                Current = OpenSet[i];
+                LowestFScore = FScore[Current];
+                CurrentIndex = i;
+            }
+        }
+
+        // Check if we've reached the target
+        if (Current.Equals(Target))
+        {
+            bFoundPath = true;
+            BestMove = ReconstructPath(CameFrom, Current, Start, MovementRange);
+            break;
+        }
+
+        // Remove current from open set and add to closed set
+        OpenSet.RemoveAt(CurrentIndex);
+        ClosedSet.Add(Current);
+
+        // Get current G score
+        int32 CurrentG = GScore[Current];
+
+        // Stop expanding if we've reached our movement limit
+        if (CurrentG >= MovementRange)
+            continue;
+
+        // Check all four directions
+        for (int32 i = 0; i < 4; i++)
+        {
+            int32 NewX = FMath::FloorToInt(Current.X) + dx[i];
+            int32 NewY = FMath::FloorToInt(Current.Y) + dy[i];
+            FVector2D Neighbor(NewX, NewY);
+
+            // Skip if invalid position
+            if (!GridManager->IsValidPosition(Neighbor))
+                continue;
+
+            // Skip if in closed set
+            if (ClosedSet.Contains(Neighbor))
+                continue;
+
+            // Skip if cell is occupied (unless it's the target)
+            if (GridManager->IsCellOccupied(NewX, NewY) &&
+                !(NewX == Target.X && NewY == Target.Y))
+                continue;
+
+            // Calculate new G score (one more move)
+            int32 TentativeG = CurrentG + 1;
+
+            // If we haven't seen this neighbor yet or found a better path
+            if (!GScore.Contains(Neighbor) || TentativeG < GScore[Neighbor])
+            {
+                // Record this path
+                CameFrom.Add(Neighbor, Current);
+                GScore.Add(Neighbor, TentativeG);
+                FScore.Add(Neighbor, TentativeG + ManhattanDistance(Neighbor, Target));
+
+                // If this move is better than our current best and within movement range
+                if (TentativeG <= MovementRange &&
+                    ManhattanDistance(Neighbor, Target) < BestDistanceToTarget)
+                {
+                    BestMove = Neighbor;
+                    BestDistanceToTarget = ManhattanDistance(Neighbor, Target);
+                }
+
+                // Add to open set if not already there
+                if (!OpenSet.Contains(Neighbor))
+                {
+                    OpenSet.Add(Neighbor);
+                }
+            }
+        }
+    }
+
+    if (!bFoundPath && !BestMove.Equals(Start))
+    {
+        UE_LOG(LogTemp, Warning, TEXT("AI: No complete path found, using best available move"));
+    }
+    else if (BestMove.Equals(Start))
+    {
+        UE_LOG(LogTemp, Warning, TEXT("AI: No valid moves found, staying in place"));
+        return;
+    }
+
+    // Reconstruct the path from the start to the best move
+    TArray<FVector2D> Path;
+    FVector2D Current = BestMove;
+    while (CameFrom.Contains(Current) && !Current.Equals(Start))
+    {
+        Path.Insert(Current, 0);
+        Current = CameFrom[Current];
+    }
+    Path.Insert(Start, 0);
+
+    // Move the unit to the best position found
+    UE_LOG(LogTemp, Warning, TEXT("AI: Moving unit from (%d,%d) to (%d,%d)"),
+        AIUnit->GridX, AIUnit->GridY, FMath::FloorToInt(BestMove.X), FMath::FloorToInt(BestMove.Y));
+
+    // Store old position for logging
+    int32 OldX = AIUnit->GridX;
+    int32 OldY = AIUnit->GridY;
+
+    // Free the current cell
+    GridManager->OccupyCell(OldX, OldY, nullptr);
+
+    // Update unit's position
+    AIUnit->GridX = FMath::FloorToInt(BestMove.X);
+    AIUnit->GridY = FMath::FloorToInt(BestMove.Y);
+    AIUnit->SetActorLocation(GridManager->GetWorldLocationFromGrid(AIUnit->GridX, AIUnit->GridY));
+
+    // Mark unit as moved
+    AIUnit->bHasMovedThisTurn = true;
+
+    // Occupy the new cell
+    GridManager->OccupyCell(AIUnit->GridX, AIUnit->GridY, AIUnit);
+
+    // Highlight the path
+    GridManager->HighlightPath(Path, true);
+
+    // Log the move
+    AGameModeBase* GameModeBase = UGameplayStatics::GetGameMode(GetWorld());  
+    ASaT_GameMode* GameMode = Cast<ASaT_GameMode>(GameModeBase);
+    if (GameMode)
+    {
+        FString UnitType = Cast<ASniper>(AIUnit) ? TEXT("Sniper") : TEXT("Brawler");
+        GameMode->AddFormattedMoveToLog(
+            false, // IsPlayerUnit = false for AI units  
+            UnitType,
+            TEXT("Move"),
+            FVector2D(OldX, OldY),
+            FVector2D(AIUnit->GridX, AIUnit->GridY)
+        );
+    }
+}
+
+// Helper function to reconstruct a path from A* search and get the best move within range
+FVector2D ASaT_RandomPlayer::ReconstructPath(const TMap<FVector2D, FVector2D>& CameFrom,
+    FVector2D Current, FVector2D Start, int32 MaxSteps)
+{
+    // Build the complete path
+    TArray<FVector2D> Path;
+    Path.Add(Current);
+
+    while (CameFrom.Contains(Current) && !Current.Equals(Start))
+    {
+        Current = CameFrom[Current];
+        Path.Add(Current);
+    }
+
+    // Reverse the path and find the last step within range
+    if (Path.Num() <= MaxSteps + 1)
+    {
+        // We can reach the end of the path, so return the last non-start point
+        for (int32 i = Path.Num() - 1; i >= 0; i--)
+        {
+            if (!Path[i].Equals(Start))
+            {
+                return Path[i];
+            }
+        }
+    }
+    else
+    {
+        // We can only go MaxSteps steps, so return the MaxSteps-th position from the end
+        return Path[Path.Num() - 1 - MaxSteps];
+    }
+
+    // Fallback - return starting position if no valid move found
+    return Start;
 }
 
 void ASaT_RandomPlayer::OnWin()

@@ -54,6 +54,13 @@ enum class ETileStatus : uint8
 	OCCUPIED UMETA(DisplayName = "Occupied"),
 };
 
+UENUM(BlueprintType)
+enum class EAIDifficulty : uint8
+{
+	EASY UMETA(DisplayName = "Easy"),
+	HARD UMETA(DisplayName = "Hard")
+};
+
 class STRATEGICO_A_TURNI_API SaT_Enums
 {
 public:

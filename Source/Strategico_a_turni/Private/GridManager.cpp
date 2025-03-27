@@ -20,8 +20,6 @@ AGridManager::AGridManager()
 	// tile padding percentage 
 	CellPadding = 0.01f;
 
-	ObstaclePercentage = 0.1f;
-
 	static ConstructorHelpers::FObjectFinder<UMaterial> DefaultMatAsset(TEXT("/Game/Materials/M_BaseMaterial"));
 	if (DefaultMatAsset.Succeeded())
 	{
@@ -59,12 +57,6 @@ void AGridManager::BeginPlay()
 {
 	Super::BeginPlay();
 
-	// Debug materials before generating field
-	DebugMaterials();
-
-	// Generate the field
-	GenerateField();
-
 	// Verify path material is set
 	if (!PathMaterial)
 	{
@@ -78,10 +70,31 @@ void AGridManager::BeginPlay()
 			UE_LOG(LogTemp, Warning, TEXT("Successfully loaded path material from content browser."));
 		}
 	}
+
+	// Debug materials before generating field
+	DebugMaterials();
+
+	// Generate the field
+	GenerateField();
 }
 
 void AGridManager::GenerateField()
 {
+
+	UE_LOG(LogTemp, Warning, TEXT("Generating field with %f%% obstacles"), ObstaclePercentage * 100.0f);
+	// Clear all existing tiles first
+	for (ATile* Tile : TileArray)
+	{
+		if (Tile)
+		{
+			Tile->Destroy();
+		}
+	}
+	TileArray.Empty();
+	TileMap.Empty();
+	HighlightedTiles.Empty();
+	PathTiles.Empty();
+
 	// First, generate the basic grid without obstacles
 	for (int32 IndexX = 0; IndexX < Size; IndexX++)
 	{
@@ -197,58 +210,94 @@ bool AGridManager::AllEqual(const TArray<int32>& Array) const
 // Verifica se una cella è occupata
 bool AGridManager::IsCellOccupied(int32 GridX, int32 GridY)
 {
+	// Log this check for debugging
+	UE_LOG(LogTemp, Display, TEXT("Checking cell occupation at (%d,%d)"), GridX, GridY);
+
 	// Verify if coordinates are valid
 	if (!IsValidPosition(FVector2D(GridX, GridY)))
 	{
+		UE_LOG(LogTemp, Warning, TEXT("Position (%d,%d) is outside grid - considered occupied"), GridX, GridY);
 		return true; // Consider invalid positions as occupied
 	}
 
 	// Find the tile at the specified position
 	FVector2D Position(GridX, GridY);
-	if (TileMap.Contains(Position))
+	if (!TileMap.Contains(Position))
 	{
-		ATile* Tile = TileMap[Position];
-		if (Tile)
-		{
-			// Check if the tile is occupied or is an obstacle
-			return Tile->bIsOccupied || Tile->bIsObstacle;
-		}
+		UE_LOG(LogTemp, Warning, TEXT("No tile found at (%d,%d) - considered occupied"), GridX, GridY);
+		return true; // If no tile exists, consider it occupied
 	}
 
-	return false;
+	ATile* Tile = TileMap[Position];
+	if (!Tile)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Tile at (%d,%d) is NULL - considered occupied"), GridX, GridY);
+		return true; // If tile pointer is null, consider it occupied
+	}
+
+	// Check both occupied state and obstacle state
+	bool bOccupied = Tile->bIsOccupied;
+	bool bObstacle = Tile->bIsObstacle;
+
+	// Debug log the state
+	if (bOccupied || bObstacle)
+	{
+		UE_LOG(LogTemp, Display, TEXT("Cell (%d,%d) is occupied=%s, obstacle=%s"),
+			GridX, GridY,
+			bOccupied ? TEXT("YES") : TEXT("NO"),
+			bObstacle ? TEXT("YES") : TEXT("NO"));
+	}
+
+	// Return true if either occupied by a unit OR is an obstacle
+	return bOccupied || bObstacle;
 }
 
 // Occupa una cella con un'unità
 void AGridManager::OccupyCell(int32 GridX, int32 GridY, AUnit* Unit)
 {
-	// Verifica se le coordinate sono valide
+	// Verify if the coordinates are valid
 	if (!IsValidPosition(FVector2D(GridX, GridY)))
 	{
 		return;
 	}
 
-	// Trova il tile corrispondente
+	// Find the tile corresponding to the position
 	FVector2D Position(GridX, GridY);
 	if (TileMap.Contains(Position))
 	{
 		ATile* Tile = TileMap[Position];
 		if (Tile)
 		{
-			// Segna il tile come occupato
-			Tile->bIsOccupied = true;
-
-			// Memorizza il riferimento all'unità (aggiungi questa proprietà a ATile)
-			Tile->OccupyingUnit = Unit;
-
-			// Aggiorna anche l'unità con la sua posizione sulla griglia (aggiungi queste proprietà a AUnit)
-			if (Unit)
+			// If Unit is nullptr, we're freeing the cell
+			if (Unit == nullptr)
 			{
+				// Mark the tile as unoccupied
+				Tile->bIsOccupied = false;
+
+				// Clear the reference to the occupying unit
+				Tile->OccupyingUnit = nullptr;
+
+				// Log the cell being freed
+				UE_LOG(LogTemp, Warning, TEXT("Cell at (%d,%d) has been freed"), GridX, GridY);
+			}
+			else
+			{
+				// Mark the tile as occupied
+				Tile->bIsOccupied = true;
+
+				// Store the reference to the occupying unit
+				Tile->OccupyingUnit = Unit;
+
+				// Update the unit's position on the grid
 				Unit->GridX = GridX;
 				Unit->GridY = GridY;
 
-				// Posiziona l'unità nel mondo
+				// Position the unit in the world
 				FVector WorldLocation = GetWorldLocationFromGrid(GridX, GridY);
 				Unit->SetActorLocation(WorldLocation);
+
+				UE_LOG(LogTemp, Warning, TEXT("Unit %s now occupies cell (%d,%d)"),
+					*Unit->GetName(), GridX, GridY);
 			}
 		}
 	}
@@ -316,104 +365,160 @@ void AGridManager::HighlightCell(int32 GridX, int32 GridY, bool bHighlight)
 	}
 }
 
-void AGridManager::HighlightPath(TArray<FVector2D> PathPoints, bool bClearPrevious)
+bool AGridManager::HighlightPath(TArray<FVector2D> PathPoints, bool bClearPrevious)
 {
-	// Extensive debug logging
-	UE_LOG(LogTemp, Warning, TEXT("===== HIGHLIGHT PATH DEBUG ====="));
-	UE_LOG(LogTemp, Warning, TEXT("Highlighting path with %d points"), PathPoints.Num());
+	UE_LOG(LogTemp, Warning, TEXT("HighlightPath called with %d points"), PathPoints.Num());
 
-	// Clear previous path highlights if specified
+	// Verify path material exists
+	if (!PathMaterial)
+	{
+		UE_LOG(LogTemp, Error, TEXT("PathMaterial is NULL! Cannot highlight path."));
+
+		// Attempt to load material as fallback
+		PathMaterial = LoadObject<UMaterial>(nullptr, TEXT("/Game/Materials/M_Path"));
+
+		if (!PathMaterial)
+		{
+			UE_LOG(LogTemp, Error, TEXT("Failed to load path material from content browser!"));
+			return false;
+		}
+	}
+
 	if (bClearPrevious)
 	{
 		ClearPathHighlights();
 	}
 
-	// Early return if no path points
-	if (PathPoints.Num() == 0)
+	// If we don't have at least 2 points, can't draw a path
+	if (PathPoints.Num() < 2)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("No path points to highlight!"));
-		return;
+		UE_LOG(LogTemp, Warning, TEXT("Not enough points to draw a path"));
+		return false;
 	}
 
-	// Forcefully load the path material if not already loaded
-	if (!PathMaterial)
+	// Generate an obstacle-aware orthogonal path
+	TArray<FVector2D> FullPath;
+
+	for (int32 i = 0; i < PathPoints.Num() - 1; i++)
 	{
-		PathMaterial = LoadObject<UMaterial>(nullptr, TEXT("/Game/Materials/M_Path"));
+		FVector2D Start = PathPoints[i];
+		FVector2D End = PathPoints[i + 1];
 
-		if (!PathMaterial)
+		int32 x0 = FMath::FloorToInt(Start.X);
+		int32 y0 = FMath::FloorToInt(Start.Y);
+		int32 x1 = FMath::FloorToInt(End.X);
+		int32 y1 = FMath::FloorToInt(End.Y);
+
+		// Check if the entire path is blocked
+		bool bPathBlocked = false;
+
+		// First try horizontal movement
+		if (x0 != x1)
 		{
-			UE_LOG(LogTemp, Error, TEXT("CRITICAL: Could not load path material from /Game/Materials/M_Path"));
-			return;
-		}
-	}
-
-	// Verify material is valid
-	if (!PathMaterial)
-	{
-		UE_LOG(LogTemp, Error, TEXT("Path material is NULL after loading attempt!"));
-		return;
-	}
-
-	// Clear and reset path tiles tracking
-	PathTiles.Empty();
-
-	// Highlight each point in the path
-	for (int32 i = 0; i < PathPoints.Num(); i++)
-	{
-		const FVector2D& Point = PathPoints[i];
-		int32 GridX = FMath::FloorToInt(Point.X);
-		int32 GridY = FMath::FloorToInt(Point.Y);
-
-		// Skip invalid positions
-		if (!IsValidPosition(FVector2D(GridX, GridY)))
-		{
-			UE_LOG(LogTemp, Warning, TEXT("Invalid path position (%d, %d), skipping"), GridX, GridY);
-			continue;
-		}
-
-		// Skip the first point (unit's current position) if it's not the only point
-		if (i == 0 && PathPoints.Num() > 1)
-		{
-			UE_LOG(LogTemp, Warning, TEXT("Skipping first point (%d, %d)"), GridX, GridY);
-			continue;
-		}
-
-		// Get the tile at this position
-		FVector2D Position(GridX, GridY);
-		ATile* Tile = nullptr;
-		if (TileMap.Contains(Position))
-		{
-			Tile = TileMap[Position];
-		}
-
-		if (Tile && Tile->StaticMeshComponent)
-		{
-			// Create a dynamic material instance for more precise control
-			UMaterialInstanceDynamic* DynamicPathMaterial = UMaterialInstanceDynamic::Create(PathMaterial, this);
-
-			if (DynamicPathMaterial)
+			int32 step = (x0 < x1) ? 1 : -1;
+			for (int32 x = x0; x != x1; x += step)
 			{
-				// Apply the dynamic material instance
-				Tile->StaticMeshComponent->SetMaterial(0, DynamicPathMaterial);
-
-				UE_LOG(LogTemp, Warning, TEXT("Applied dynamic path material to tile at (%d, %d)"), GridX, GridY);
-
-				PathTiles.Add(Tile);
+				if (IsCellOccupied(x, y0))
+				{
+					UE_LOG(LogTemp, Warning, TEXT("Path blocked horizontally at (%d,%d)"), x, y0);
+					bPathBlocked = true;
+					break;
+				}
 			}
-			else
+		}
+
+		// If horizontal path not blocked, check vertical movement
+		if (!bPathBlocked && y0 != y1)
+		{
+			int32 step = (y0 < y1) ? 1 : -1;
+			for (int32 y = y0; y != y1; y += step)
 			{
-				UE_LOG(LogTemp, Error, TEXT("Failed to create dynamic material instance for tile at (%d, %d)"), GridX, GridY);
+				if (IsCellOccupied(x1, y))
+				{
+					UE_LOG(LogTemp, Warning, TEXT("Path blocked vertically at (%d,%d)"), x1, y);
+					bPathBlocked = true;
+					break;
+				}
 			}
+		}
+
+		// If path is not blocked, add path points
+		if (!bPathBlocked)
+		{
+			// First move horizontally
+			if (x0 != x1)
+			{
+				int32 step = (x0 < x1) ? 1 : -1;
+				for (int32 x = x0; x != x1; x += step)
+				{
+					FullPath.Add(FVector2D(x, y0));
+				}
+			}
+
+			// Then move vertically
+			if (y0 != y1)
+			{
+				int32 step = (y0 < y1) ? 1 : -1;
+				for (int32 y = y0; y != y1; y += step)
+				{
+					FullPath.Add(FVector2D(x1, y));
+				}
+			}
+
+			// Add the final point
+			FullPath.Add(End);
 		}
 		else
 		{
-			UE_LOG(LogTemp, Warning, TEXT("Invalid tile or static mesh component at (%d, %d)"), GridX, GridY);
+			// If path is blocked, only add start point
+			FullPath.Add(Start);
+			UE_LOG(LogTemp, Warning, TEXT("Path between (%d,%d) and (%d,%d) is blocked"),
+				x0, y0, x1, y1);
 		}
 	}
 
-	UE_LOG(LogTemp, Warning, TEXT("Total path tiles highlighted: %d"), PathTiles.Num());
-}
+	// Highlight the path
+	int32 highlightedCount = 0;
+	for (const FVector2D& Point : FullPath)
+	{
+		int32 GridX = FMath::FloorToInt(Point.X);
+		int32 GridY = FMath::FloorToInt(Point.Y);
 
+		// Validate grid position
+		if (!IsValidPosition(FVector2D(GridX, GridY)))
+		{
+			UE_LOG(LogTemp, Warning, TEXT("Invalid path point: (%d, %d)"), GridX, GridY);
+			continue;
+		}
+
+		// Find the tile
+		ATile* Tile = nullptr;
+		if (TileMap.Contains(FVector2D(GridX, GridY)))
+		{
+			Tile = TileMap[FVector2D(GridX, GridY)];
+		}
+
+		// Highlight the tile if it exists and is not an obstacle
+		if (Tile && !Tile->bIsObstacle)
+		{
+			// Force material application
+			Tile->StaticMeshComponent->SetMaterial(0, PathMaterial);
+			Tile->StaticMeshComponent->MarkRenderStateDirty();
+
+			PathTiles.Add(Tile);
+			highlightedCount++;
+
+			UE_LOG(LogTemp, Warning, TEXT("Highlighted path tile at (%d, %d)"), GridX, GridY);
+		}
+		else
+		{
+			UE_LOG(LogTemp, Warning, TEXT("Skipping tile at (%d, %d) - Tile is NULL or an obstacle"), GridX, GridY);
+		}
+	}
+
+	UE_LOG(LogTemp, Warning, TEXT("Path highlighting complete. Highlighted %d tiles"), highlightedCount);
+	return highlightedCount > 0;
+}
 
 // Add this debug method to help troubleshoot path materials
 void AGridManager::DebugMaterials()
@@ -490,10 +595,6 @@ void AGridManager::GenerateObstacles()
 
 		ProcessedCells[CellIndex] = true;
 
-		// Skip positions around edges (leaving room for unit placement)
-		if (RandomX < 0 || RandomX >= Size - 1 || RandomY < 0 || RandomY >= Size - 1)
-			continue;
-
 		// Get the tile at this position
 		ATile* Tile = TileMap[FVector2D(RandomX, RandomY)];
 		if (!Tile)
@@ -502,10 +603,16 @@ void AGridManager::GenerateObstacles()
 		// Set as obstacle
 		Tile->bIsObstacle = true;
 
-		// Apply obstacle material
+		// ENSURE MATERIAL IS APPLIED - This is critical!
 		if (ObstacleMaterial)
 		{
 			Tile->StaticMeshComponent->SetMaterial(0, ObstacleMaterial);
+			UE_LOG(LogTemp, Warning, TEXT("Applied obstacle material to (%d,%d)"), RandomX, RandomY);
+		}
+		else
+		{
+			UE_LOG(LogTemp, Error, TEXT("ObstacleMaterial is NULL! Cannot visualize obstacle at (%d,%d)"),
+				RandomX, RandomY);
 		}
 
 		// Also mark as occupied so units can't move here
@@ -514,99 +621,69 @@ void AGridManager::GenerateObstacles()
 		PlacedObstacles++;
 	}
 
-	// Verify connectivity to ensure all non-obstacle cells can be reached
-	VerifyGridConnectivity();
-}
-
-void AGridManager::VerifyGridConnectivity()
-{
-	// Start with all cells marked as unreachable
-	TArray<bool> Visited;
-	Visited.SetNumZeroed(Size * Size);
-
-	// Find first non-obstacle cell to start from
-	int32 StartX = 0, StartY = 0;
-	bool bFoundStart = false;
-
-	for (int32 Y = 0; Y < Size && !bFoundStart; Y++)
+	// Verify all obstacles have correct material
+	for (int32 x = 0; x < Size; x++)
 	{
-		for (int32 X = 0; X < Size && !bFoundStart; X++)
+		for (int32 y = 0; y < Size; y++)
 		{
-			ATile* Tile = TileMap[FVector2D(X, Y)];
-			if (Tile && !Tile->bIsObstacle)
+			FVector2D Position(x, y);
+			if (TileMap.Contains(Position))
 			{
-				StartX = X;
-				StartY = Y;
-				bFoundStart = true;
-			}
-		}
-	}
-
-	// Run BFS from the start position
-	TQueue<FVector2D> Queue;
-	Queue.Enqueue(FVector2D(StartX, StartY));
-	Visited[StartY * Size + StartX] = true;
-
-	// Direction vectors (4 directions)
-	int32 dx[] = { 1, -1, 0, 0 };
-	int32 dy[] = { 0, 0, 1, -1 };
-
-	while (!Queue.IsEmpty())
-	{
-		FVector2D Current;
-		Queue.Dequeue(Current);
-
-		// Try all four directions
-		for (int32 i = 0; i < 4; i++)
-		{
-			int32 NewX = FMath::FloorToInt(Current.X) + dx[i];
-			int32 NewY = FMath::FloorToInt(Current.Y) + dy[i];
-
-			// Skip if out of bounds
-			if (NewX < 0 || NewX >= Size || NewY < 0 || NewY >= Size)
-				continue;
-
-			int32 NewIndex = NewY * Size + NewX;
-
-			// Skip if already visited
-			if (Visited[NewIndex])
-				continue;
-
-			// Skip if it's an obstacle
-			ATile* Tile = TileMap[FVector2D(NewX, NewY)];
-			if (Tile && !Tile->bIsObstacle)
-			{
-				Visited[NewIndex] = true;
-				Queue.Enqueue(FVector2D(NewX, NewY));
-			}
-		}
-	}
-
-	// Check for any unreachable cells and fix them
-	int32 FixedObstacles = 0;
-	for (int32 Y = 0; Y < Size; Y++)
-	{
-		for (int32 X = 0; X < Size; X++)
-		{
-			int32 Index = Y * Size + X;
-			ATile* Tile = TileMap[FVector2D(X, Y)];
-
-			if (Tile && !Tile->bIsObstacle && !Visited[Index])
-			{
-				// This is a non-obstacle cell that couldn't be reached
-				// Find the nearest obstacle and remove it to create a path
-				if (RemoveObstacleToCreatePath(X, Y))
+				ATile* Tile = TileMap[Position];
+				if (Tile && Tile->bIsObstacle && ObstacleMaterial)
 				{
-					FixedObstacles++;
+					// Double-check material is applied
+					Tile->StaticMeshComponent->SetMaterial(0, ObstacleMaterial);
 				}
 			}
 		}
 	}
 
-	if (FixedObstacles > 0)
+	// Call debug function to verify obstacle state
+	DebugObstacles();
+}
+
+void AGridManager::DebugObstacles()
+{
+	UE_LOG(LogTemp, Warning, TEXT("========== OBSTACLE DEBUG =========="));
+	UE_LOG(LogTemp, Warning, TEXT("ObstaclePercentage: %f"), ObstaclePercentage);
+
+	int32 ObstacleCount = 0;
+	int32 OccupiedCount = 0;
+	int32 BothCount = 0;
+
+	for (int32 x = 0; x < Size; x++)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("Fixed %d obstacles to ensure grid connectivity"), FixedObstacles);
+		for (int32 y = 0; y < Size; y++)
+		{
+			FVector2D Position(x, y);
+			if (TileMap.Contains(Position))
+			{
+				ATile* Tile = TileMap[Position];
+				if (Tile)
+				{
+					if (Tile->bIsObstacle && Tile->bIsOccupied)
+					{
+						BothCount++;
+						UE_LOG(LogTemp, Warning, TEXT("Tile at (%d,%d) is BOTH obstacle AND occupied"), x, y);
+					}
+					else if (Tile->bIsObstacle)
+					{
+						ObstacleCount++;
+					}
+					else if (Tile->bIsOccupied)
+					{
+						OccupiedCount++;
+					}
+				}
+			}
+		}
 	}
+
+	UE_LOG(LogTemp, Warning, TEXT("Total obstacles: %d"), ObstacleCount);
+	UE_LOG(LogTemp, Warning, TEXT("Total occupied (non-obstacle): %d"), OccupiedCount);
+	UE_LOG(LogTemp, Warning, TEXT("Total both obstacle AND occupied: %d"), BothCount);
+	UE_LOG(LogTemp, Warning, TEXT("===================================="));
 }
 
 bool AGridManager::RemoveObstacleToCreatePath(int32 UnreachableX, int32 UnreachableY)

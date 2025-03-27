@@ -114,7 +114,7 @@ public:
 	TArray<ATile*> PathTiles;  // Track path tiles separately from movement range
 
 	UFUNCTION(BlueprintCallable, Category = "Grid")
-	void HighlightPath(TArray<FVector2D> PathPoints, bool bClearPrevious = true);
+	bool HighlightPath(TArray<FVector2D> PathPoints, bool bClearPrevious = true);
 
 	UFUNCTION(BlueprintCallable, Category = "Grid")
 	void ClearPathHighlights();
@@ -131,8 +131,10 @@ public:
 	float ObstaclePercentage;
 
 	void GenerateObstacles();
-	void VerifyGridConnectivity();
+	//void VerifyGridConnectivity();
 	bool RemoveObstacleToCreatePath(int32 UnreachableX, int32 UnreachableY);
+
+	void DebugObstacles();
 
 	//public:	
 	//	// Called every frame

@@ -25,6 +25,9 @@ public:
     bool bIsPlayerTurn;
 
     UPROPERTY(BlueprintReadWrite, Category = "Game")
+    EAIDifficulty AIDifficulty;
+
+    UPROPERTY(BlueprintReadWrite, Category = "Game")
     EGamePhase CurrentPhase;
 
     UFUNCTION(BlueprintCallable, Category = "Game")
@@ -57,4 +60,12 @@ public:
     EGamePhase GetGamePhase() const;
 
     int32 CurrentTurnNumber;
+
+    UFUNCTION(BlueprintCallable, Category = "Game")
+    void SetAIDifficulty(EAIDifficulty NewDifficulty);
+
+    // Function to set up the game with selected difficulty
+    UFUNCTION(BlueprintCallable, Category = "Game")
+    void SetupGameWithDifficulty(EAIDifficulty Difficulty);
+
 };

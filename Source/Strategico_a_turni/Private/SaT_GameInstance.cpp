@@ -5,6 +5,8 @@
 
 
 #include "SaT_GameInstance.h"
+#include "SaT_GameMode.h"
+#include "GridManager.h"
 #include "Kismet/GameplayStatics.h"
 
 USaT_GameInstance::USaT_GameInstance()
@@ -16,6 +18,79 @@ USaT_GameInstance::USaT_GameInstance()
     HumanUnitsPlaced = 0;
     AIUnitsPlaced = 0;
     CurrentTurnNumber = 1;
+
+    AIDifficulty = EAIDifficulty::HARD;
+}
+
+void USaT_GameInstance::SetAIDifficulty(EAIDifficulty NewDifficulty)
+{
+    AIDifficulty = NewDifficulty;
+    UE_LOG(LogTemp, Warning, TEXT("AI Difficulty set to: %s"),
+        AIDifficulty == EAIDifficulty::EASY ? TEXT("EASY") : TEXT("HARD"));
+}
+
+void USaT_GameInstance::SetupGameWithDifficulty(EAIDifficulty Difficulty)
+{
+    // Store the difficulty setting
+    SetAIDifficulty(Difficulty);
+
+    // Restart the game setup process
+    AGameModeBase* GameModeBase = UGameplayStatics::GetGameMode(GetWorld());
+    ASaT_GameMode* GameMode = Cast<ASaT_GameMode>(GameModeBase);
+    if (GameMode)
+    {
+        // Clear the difficulty widget and start the game
+        GameMode->HideDifficultyWidget();
+
+        // Find the grid manager to adjust obstacle percentage
+        AGridManager* GridManager = nullptr;
+        TArray<AActor*> FoundGrids;
+        UGameplayStatics::GetAllActorsOfClass(GetWorld(), AGridManager::StaticClass(), FoundGrids);
+        if (FoundGrids.Num() > 0)
+        {
+            GridManager = Cast<AGridManager>(FoundGrids[0]);
+
+            // IMPORTANT: Save reference to path material before regenerating
+            UMaterialInterface* SavedPathMaterial = nullptr;
+            if (GridManager)
+            {
+                SavedPathMaterial = GridManager->PathMaterial;
+
+                // Adjust obstacle percentage based on difficulty
+                if (Difficulty == EAIDifficulty::HARD)
+                {
+                    // More obstacles in Hard mode
+                    GridManager->ObstaclePercentage = 0.2f; // 20% obstacles
+                }
+                else
+                {
+                    // Fewer obstacles in Easy mode
+                    GridManager->ObstaclePercentage = 0.1f; // 10% obstacles
+                }
+
+                // Regenerate the grid with the new obstacle percentage
+                GridManager->TileArray.Empty();
+                GridManager->TileMap.Empty();
+                GridManager->HighlightedTiles.Empty();
+                GridManager->PathTiles.Empty();
+                GridManager->GenerateField();
+
+                // IMPORTANT: Restore path material after regenerating
+                if (SavedPathMaterial)
+                {
+                    GridManager->PathMaterial = SavedPathMaterial;
+                    UE_LOG(LogTemp, Warning, TEXT("Path material preserved during grid regeneration"));
+                }
+            }
+        }
+
+        // Start the game
+        GameMode->StartGame();
+    }
+
+    UE_LOG(LogTemp, Warning, TEXT("Setting up game with difficulty: %s - Obstacle percentage: %f%%"),
+        Difficulty == EAIDifficulty::EASY ? TEXT("EASY") : TEXT("HARD"),
+        (Difficulty == EAIDifficulty::EASY ? 0.1f : 0.2f) * 100.0f);
 }
 
 void USaT_GameInstance::TossCoin()

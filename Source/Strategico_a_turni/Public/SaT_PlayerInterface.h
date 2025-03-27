@@ -5,7 +5,6 @@
 #include "CoreMinimal.h"
 #include "UObject/Interface.h"
 #include "Sat_GameInstance.h"
-#include "Sat_GameMode.h"
 #include "SaT_PlayerInterface.generated.h"
 
 enum class EUnitColor : int8;

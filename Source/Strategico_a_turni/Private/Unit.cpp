@@ -185,6 +185,21 @@ void AUnit::DamageTaken(int32 Damage)
     {
         UE_LOG(LogTemp, Warning, TEXT("%s has been killed!"), *GetName());
 
+        // Free the grid cell this unit was occupying
+        AGridManager* GridManager = nullptr;
+        TArray<AActor*> FoundGrids;
+        UGameplayStatics::GetAllActorsOfClass(GetWorld(), AGridManager::StaticClass(), FoundGrids);
+        if (FoundGrids.Num() > 0)
+        {
+            GridManager = Cast<AGridManager>(FoundGrids[0]);
+            if (GridManager)
+            {
+                // Free the cell
+                GridManager->OccupyCell(GridX, GridY, nullptr);
+                UE_LOG(LogTemp, Warning, TEXT("Freed grid cell at (%d,%d) after unit death"), GridX, GridY);
+            }
+        }
+
         // Destroy the actor after a delay to allow for death animations
         SetActorHiddenInGame(true);
         SetActorEnableCollision(false);
