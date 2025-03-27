@@ -325,6 +325,7 @@ bool ASaT_HumanPlayer::HasPlacedAllUnits() const
 
 void ASaT_HumanPlayer::PlaceUnit(int32 GridX, int32 GridY, bool bIsSniper)
 {
+
     if (PlacedUnitsCount >= UnitsToPlace)
     {
         UE_LOG(LogTemp, Warning, TEXT("Cannot place more units - already placed maximum (%d/%d)"),
@@ -772,6 +773,26 @@ void ASaT_HumanPlayer::DeselectCurrentUnit()
 
 void ASaT_HumanPlayer::ShowUnitSelectionWidget()
 {
+
+    if (GameInstance)
+    {
+        bool bAlreadyPlacedThisTurn = false;
+
+        // If it's a setup phase, check against turns
+        if (GameInstance->GetGamePhase() == EGamePhase::SETUP)
+        {
+            int32 CurrentTurnNumber = GameInstance->CurrentTurnNumber;
+            int32 ExpectedUnits = (CurrentTurnNumber + 1) / 2;
+
+            // If we've placed the expected number of units for this turn, don't show widget
+            if (PlacedUnitsCount >= ExpectedUnits)
+            {
+                UE_LOG(LogTemp, Warning, TEXT("Already placed a unit this turn. End your turn to continue."));
+                return;
+            }
+        }
+    }
+
     // Get player controller
     APlayerController* PC = GetWorld()->GetFirstPlayerController();
     if (!PC)

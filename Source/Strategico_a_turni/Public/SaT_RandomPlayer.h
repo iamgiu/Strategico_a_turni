@@ -82,7 +82,7 @@ public:
     // Methods for different AI difficulties
     void ProcessUnitActionsRandom(AUnit* Unit);
     AUnit* FindRandomAttackTarget(AUnit* AIUnit);
-    void MoveRandomly(AUnit* AIUnit);
+    bool MoveRandomly(AUnit* AIUnit);
 
     bool IsPathClear(int32 StartX, int32 StartY, int32 EndX, int32 EndY);
 };

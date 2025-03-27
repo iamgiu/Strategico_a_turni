@@ -466,11 +466,19 @@ void ASaT_RandomPlayer::ProcessNextAIUnit()
     if (CurrentUnitIndex < AIUnits.Num())
     {
         AUnit* CurrentUnit = AIUnits[CurrentUnitIndex];
-        UE_LOG(LogTemp, Warning, TEXT("AI: Processing unit %d: %s"),
-            CurrentUnitIndex, *CurrentUnit->GetName());
+        if (CurrentUnit && CurrentUnit->IsAlive())
+        {
+            UE_LOG(LogTemp, Warning, TEXT("AI: Processing unit %d: %s"),
+                CurrentUnitIndex, *CurrentUnit->GetName());
 
-        // Make moves with the current unit
-        ProcessUnitActions(CurrentUnit);
+            // Make moves with the current unit
+            ProcessUnitActions(CurrentUnit);
+        }
+        else
+        {
+            UE_LOG(LogTemp, Warning, TEXT("AI: Unit %d is invalid or dead, skipping"),
+                CurrentUnitIndex);
+        }
 
         // Increment index for next unit and schedule next unit processing
         CurrentUnitIndex++;
@@ -506,49 +514,153 @@ void ASaT_RandomPlayer::ProcessUnitActions(AUnit* Unit)
 // Process unit actions with random behavior (Easy mode)
 void ASaT_RandomPlayer::ProcessUnitActionsRandom(AUnit* Unit)
 {
-    // Random behavior for Easy AI:
-    // - Random chance to move or attack first
-    // - Random target selection
-    // - Random movement within range
+    if (!Unit || !Unit->IsAlive())
+    {
+        UE_LOG(LogTemp, Warning, TEXT("AI: Unit is invalid or dead"));
+        return;
+    }
 
-    // Check if we can attack first (50% chance)
+    bool bActionTaken = false;
+
+    // 50% chance to try attacking first
     bool bAttackFirst = FMath::RandBool();
 
     if (bAttackFirst)
     {
-        // Try attack first, then maybe move
+        // Try attack first
         if (!Unit->bHasAttackedThisTurn)
         {
             AUnit* Target = FindRandomAttackTarget(Unit);
             if (Target)
             {
-                // Attack logic
+                // Get target's HP before attack
+                int32 TargetHPBefore = Target->Hp;
+
+                // Perform attack
                 Unit->Attack(Target);
+                Unit->bHasAttackedThisTurn = true; // Mark as attacked
+
+                // Calculate damage
+                int32 DamageDealt = TargetHPBefore - Target->Hp;
+                bActionTaken = true;
+
+                // Log attack
+                AGameModeBase* GameModeBase = UGameplayStatics::GetGameMode(GetWorld());
+                ASaT_GameMode* GameMode = Cast<ASaT_GameMode>(GameModeBase);
+                if (GameMode)
+                {
+                    FString UnitType = Cast<ASniper>(Unit) ? TEXT("Sniper") : TEXT("Brawler");
+                    GameMode->AddFormattedMoveToLog(
+                        false,
+                        UnitType,
+                        TEXT("Attack"),
+                        FVector2D(Unit->GridX, Unit->GridY),
+                        FVector2D(Target->GridX, Target->GridY),
+                        DamageDealt
+                    );
+                }
             }
         }
 
-        // Maybe move after attack (75% chance)
-        if (!Unit->bHasMovedThisTurn && FMath::RandRange(0, 3) > 0)
+        // Then try to move
+        if (!Unit->bHasMovedThisTurn)
         {
-            MoveRandomly(Unit);
+            if (MoveRandomly(Unit))
+            {
+                bActionTaken = true;
+            }
         }
     }
     else
     {
-        // Move first, then maybe attack
+        // Try move first
         if (!Unit->bHasMovedThisTurn)
         {
-            MoveRandomly(Unit);
+            if (MoveRandomly(Unit))
+            {
+                bActionTaken = true;
+            }
         }
 
-        // Maybe attack after moving (75% chance)
-        if (!Unit->bHasAttackedThisTurn && FMath::RandRange(0, 3) > 0)
+        // Then try to attack
+        if (!Unit->bHasAttackedThisTurn)
         {
             AUnit* Target = FindRandomAttackTarget(Unit);
             if (Target)
             {
-                // Attack logic
+                // Get target's HP before attack
+                int32 TargetHPBefore = Target->Hp;
+
+                // Perform attack
                 Unit->Attack(Target);
+                Unit->bHasAttackedThisTurn = true; // Mark as attacked
+
+                // Calculate damage
+                int32 DamageDealt = TargetHPBefore - Target->Hp;
+                bActionTaken = true;
+
+                // Log attack
+                AGameModeBase* GameModeBase = UGameplayStatics::GetGameMode(GetWorld());
+                ASaT_GameMode* GameMode = Cast<ASaT_GameMode>(GameModeBase);
+                if (GameMode)
+                {
+                    FString UnitType = Cast<ASniper>(Unit) ? TEXT("Sniper") : TEXT("Brawler");
+                    GameMode->AddFormattedMoveToLog(
+                        false,
+                        UnitType,
+                        TEXT("Attack"),
+                        FVector2D(Unit->GridX, Unit->GridY),
+                        FVector2D(Target->GridX, Target->GridY),
+                        DamageDealt
+                    );
+                }
+            }
+        }
+    }
+
+    // If no action was taken yet, force a move or attack
+    if (!bActionTaken)
+    {
+        // Try move first
+        if (!Unit->bHasMovedThisTurn)
+        {
+            // Expand the search radius for valid moves if needed
+            if (MoveRandomly(Unit))
+            {
+                bActionTaken = true;
+            }
+        }
+
+        // If still no action, try attack again
+        if (!bActionTaken && !Unit->bHasAttackedThisTurn)
+        {
+            AUnit* Target = FindRandomAttackTarget(Unit);
+            if (Target)
+            {
+                // Get target's HP before attack
+                int32 TargetHPBefore = Target->Hp;
+
+                // Perform attack
+                Unit->Attack(Target);
+
+                // Calculate damage
+                int32 DamageDealt = TargetHPBefore - Target->Hp;
+
+                // Log attack
+                AGameModeBase* GameModeBase = UGameplayStatics::GetGameMode(GetWorld());
+                ASaT_GameMode* GameMode = Cast<ASaT_GameMode>(GameModeBase);
+                if (GameMode)
+                {
+                    FString UnitType = Cast<ASniper>(Unit) ? TEXT("Sniper") : TEXT("Brawler");
+                    GameMode->AddFormattedMoveToLog(
+                        false,
+                        UnitType,
+                        TEXT("Attack"),
+                        FVector2D(Unit->GridX, Unit->GridY),
+                        FVector2D(Target->GridX, Target->GridY),
+                        DamageDealt
+                    );
+                }
             }
         }
     }
@@ -596,19 +708,19 @@ AUnit* ASaT_RandomPlayer::FindRandomAttackTarget(AUnit* AIUnit)
 }
 
 // Move the unit to a random valid position
-void ASaT_RandomPlayer::MoveRandomly(AUnit* Unit)
+bool ASaT_RandomPlayer::MoveRandomly(AUnit* Unit)
 {
     if (!Unit || !GridManager)
     {
         UE_LOG(LogTemp, Error, TEXT("MoveRandomly: Invalid Unit or GridManager"));
-        return;
+        return false;
     }
 
     // Unit has already moved
     if (Unit->bHasMovedThisTurn)
     {
         UE_LOG(LogTemp, Warning, TEXT("Unit %s has already moved this turn"), *Unit->GetName());
-        return;
+        return false;
     }
 
     // Get the unit's current position and movement range
@@ -626,6 +738,10 @@ void ASaT_RandomPlayer::MoveRandomly(AUnit* Unit)
         {
             // Skip if out of grid bounds
             if (X < 0 || X >= 25 || Y < 0 || Y >= 25)
+                continue;
+
+            // Skip if it's the current position
+            if (X == UnitX && Y == UnitY)
                 continue;
 
             // Calculate Manhattan distance
@@ -649,7 +765,7 @@ void ASaT_RandomPlayer::MoveRandomly(AUnit* Unit)
     if (ValidMoves.Num() == 0)
     {
         UE_LOG(LogTemp, Warning, TEXT("No valid moves found for unit %s"), *Unit->GetName());
-        return;
+        return false;
     }
 
     // Randomly select a move from valid options
@@ -700,6 +816,8 @@ void ASaT_RandomPlayer::MoveRandomly(AUnit* Unit)
             FVector2D(Unit->GridX, Unit->GridY)
         );
     }
+
+    return true;
 }
 
 // Helper method to validate the entire path
