@@ -641,6 +641,8 @@ void AGridManager::GenerateObstacles()
 
 	// Call debug function to verify obstacle state
 	DebugObstacles();
+
+	EnsureGridConnectivity();
 }
 
 void AGridManager::DebugObstacles()
@@ -757,9 +759,237 @@ bool AGridManager::RemoveObstacleToCreatePath(int32 UnreachableX, int32 Unreacha
 	return false;  // No obstacles needed to be removed
 }
 
-// Called every frame
-//void AGameField::Tick(float DeltaTime)
-//{
-//	Super::Tick(DeltaTime);
-//
-//}
+bool AGridManager::EnsureGridConnectivity()
+{
+	// Create a copy of the current obstacle configuration
+	TArray<bool> ObstacleMap;
+	ObstacleMap.SetNumZeroed(Size * Size);
+
+	// Populate obstacle map
+	for (int32 x = 0; x < Size; x++)
+	{
+		for (int32 y = 0; y < Size; y++)
+		{
+			ObstacleMap[y * Size + x] = TileMap[FVector2D(x, y)]->bIsObstacle;
+		}
+	}
+
+	// Identify regions (connected groups of cells)
+	TArray<int32> RegionMap;
+	RegionMap.SetNumZeroed(Size * Size);
+	int32 RegionCount = IdentifyRegions(ObstacleMap, RegionMap);
+
+	// If there's only one region, we're done
+	if (RegionCount <= 1)
+	{
+		return true;
+	}
+
+	// Find the largest region (presumably the main playable area)
+	int32 LargestRegionId = FindLargestRegion(RegionMap, RegionCount);
+
+	// Connect smaller regions to the largest region
+	bool bConnectivityImproved = ConnectRegions(ObstacleMap, RegionMap, LargestRegionId);
+
+	// If connectivity was improved, update the grid
+	if (bConnectivityImproved)
+	{
+		// Update obstacle status in tiles
+		for (int32 x = 0; x < Size; x++)
+		{
+			for (int32 y = 0; y < Size; y++)
+			{
+				int32 Index = y * Size + x;
+				TileMap[FVector2D(x, y)]->bIsObstacle = ObstacleMap[Index];
+
+				// Update material if needed
+				if (ObstacleMap[Index] && ObstacleMaterial)
+				{
+					TileMap[FVector2D(x, y)]->StaticMeshComponent->SetMaterial(0, ObstacleMaterial);
+				}
+				else if (!ObstacleMap[Index] && DefaultTileMaterial)
+				{
+					TileMap[FVector2D(x, y)]->StaticMeshComponent->SetMaterial(0, DefaultTileMaterial);
+				}
+			}
+		}
+
+		UE_LOG(LogTemp, Warning, TEXT("Grid connectivity improved by connecting regions"));
+		return true;
+	}
+
+	UE_LOG(LogTemp, Error, TEXT("Could not ensure grid connectivity"));
+	return false;
+}
+
+int32 AGridManager::IdentifyRegions(const TArray<bool>& ObstacleMap, TArray<int32>& RegionMap)
+{
+	int32 CurrentRegion = 1;
+	TArray<bool> Visited;
+	Visited.SetNumZeroed(Size * Size);
+
+	for (int32 x = 0; x < Size; x++)
+	{
+		for (int32 y = 0; y < Size; y++)
+		{
+			int32 Index = y * Size + x;
+
+			// Skip if already visited or is an obstacle
+			if (Visited[Index] || ObstacleMap[Index])
+				continue;
+
+			// Flood fill to mark this region
+			FloodFillRegion(ObstacleMap, RegionMap, Visited, x, y, CurrentRegion);
+			CurrentRegion++;
+		}
+	}
+
+	return CurrentRegion - 1;
+}
+
+void AGridManager::FloodFillRegion(const TArray<bool>& ObstacleMap,
+	TArray<int32>& RegionMap,
+	TArray<bool>& Visited,
+	int32 StartX, int32 StartY,
+	int32 RegionId)
+{
+	// Directions: up, right, down, left
+	int32 dx[] = { 0, 1, 0, -1 };
+	int32 dy[] = { -1, 0, 1, 0 };
+
+	// Queue for flood fill
+	TQueue<FVector2D> Queue;
+	Queue.Enqueue(FVector2D(StartX, StartY));
+
+	while (!Queue.IsEmpty())
+	{
+		FVector2D Current;
+		Queue.Dequeue(Current);
+
+		int32 x = FMath::FloorToInt(Current.X);
+		int32 y = FMath::FloorToInt(Current.Y);
+		int32 Index = y * Size + x;
+
+		// Skip if out of bounds, visited, or an obstacle
+		if (x < 0 || x >= Size || y < 0 || y >= Size ||
+			Visited[Index] || ObstacleMap[Index])
+			continue;
+
+		// Mark as visited and assign region
+		Visited[Index] = true;
+		RegionMap[Index] = RegionId;
+
+		// Explore adjacent cells
+		for (int32 i = 0; i < 4; i++)
+		{
+			int32 NewX = x + dx[i];
+			int32 NewY = y + dy[i];
+
+			// Ensure new coordinates are in bounds
+			if (NewX >= 0 && NewX < Size && NewY >= 0 && NewY < Size)
+			{
+				Queue.Enqueue(FVector2D(NewX, NewY));
+			}
+		}
+	}
+}
+
+int32 AGridManager::FindLargestRegion(const TArray<int32>& RegionMap, int32 RegionCount)
+{
+	// Count cells in each region
+	TArray<int32> RegionSizes;
+	RegionSizes.SetNumZeroed(RegionCount + 1);
+
+	for (int32 i = 0; i < RegionMap.Num(); i++)
+	{
+		if (RegionMap[i] > 0)
+		{
+			RegionSizes[RegionMap[i]]++;
+		}
+	}
+
+	// Find the region with the most cells
+	int32 LargestRegionId = 1;
+	for (int32 i = 2; i < RegionSizes.Num(); i++)
+	{
+		if (RegionSizes[i] > RegionSizes[LargestRegionId])
+		{
+			LargestRegionId = i;
+		}
+	}
+
+	return LargestRegionId;
+}
+
+bool AGridManager::ConnectRegions(TArray<bool>& ObstacleMap,
+	const TArray<int32>& RegionMap,
+	int32 LargestRegionId)
+{
+	bool bConnectivityImproved = false;
+	int32 MaxAttempts = Size * Size / 10; // Limit total obstacle removals
+	int32 AttemptsCount = 0;
+
+	// Find border cells between regions
+	for (int32 x = 1; x < Size - 1; x++)
+	{
+		for (int32 y = 1; y < Size - 1; y++)
+		{
+			int32 Index = y * Size + x;
+
+			// Only consider obstacle cells
+			if (!ObstacleMap[Index])
+				continue;
+
+			// Check adjacent cells
+			bool bAdjacentToLargeRegion = false;
+			bool bAdjacentToSmallRegion = false;
+			int32 SmallRegionId = 0;
+
+			// Check 4-way adjacency
+			int32 dx[] = { 0, 1, 0, -1 };
+			int32 dy[] = { -1, 0, 1, 0 };
+
+			for (int32 i = 0; i < 4; i++)
+			{
+				int32 NewX = x + dx[i];
+				int32 NewY = y + dy[i];
+				int32 AdjIndex = NewY * Size + NewX;
+
+				if (NewX >= 0 && NewX < Size && NewY >= 0 && NewY < Size)
+				{
+					// Skip if adjacent cell is an obstacle
+					if (ObstacleMap[AdjIndex])
+						continue;
+
+					if (RegionMap[AdjIndex] == LargestRegionId)
+					{
+						bAdjacentToLargeRegion = true;
+					}
+					else if (RegionMap[AdjIndex] > 0 && RegionMap[AdjIndex] != LargestRegionId)
+					{
+						bAdjacentToSmallRegion = true;
+						SmallRegionId = RegionMap[AdjIndex];
+					}
+				}
+			}
+
+			// If this obstacle is a potential connection point
+			if (bAdjacentToLargeRegion && bAdjacentToSmallRegion)
+			{
+				// Remove the obstacle
+				ObstacleMap[Index] = false;
+				bConnectivityImproved = true;
+				AttemptsCount++;
+
+				// Stop if we've made enough connections
+				if (AttemptsCount >= MaxAttempts)
+				{
+					UE_LOG(LogTemp, Warning, TEXT("Reached max attempts to connect regions"));
+					return bConnectivityImproved;
+				}
+			}
+		}
+	}
+
+	return bConnectivityImproved;
+}

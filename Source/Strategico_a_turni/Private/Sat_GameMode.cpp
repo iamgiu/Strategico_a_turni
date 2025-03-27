@@ -1143,8 +1143,6 @@ void ASaT_GameMode::ShowGameOverWidget(bool bShow)
 
 void ASaT_GameMode::ResetGame()
 {
-    UE_LOG(LogTemp, Warning, TEXT("===== RESETTING GAME ====="));
-
     // Ensure we have a valid GameInstance
     USaT_GameInstance* GameInstance = Cast<USaT_GameInstance>(UGameplayStatics::GetGameInstance(GetWorld()));
     if (!GameInstance)
@@ -1160,8 +1158,6 @@ void ASaT_GameMode::ResetGame()
     TArray<AActor*> AllUnits, AllTiles;
     UGameplayStatics::GetAllActorsOfClass(GetWorld(), AUnit::StaticClass(), AllUnits);
     UGameplayStatics::GetAllActorsOfClass(GetWorld(), ATile::StaticClass(), AllTiles);
-
-    UE_LOG(LogTemp, Warning, TEXT("Destroying %d units and %d tiles"), AllUnits.Num(), AllTiles.Num());
 
     // Destroy units
     for (AActor* UnitActor : AllUnits)
@@ -1213,8 +1209,6 @@ void ASaT_GameMode::ResetGame()
             HumanPlayer->bHasPlacedSniper = false;
             HumanPlayer->bHasPlacedBrawler = false;
             HumanPlayer->UnitsToPlace = 2;
-
-            UE_LOG(LogTemp, Warning, TEXT("Reset Human Player placement flags"));
         }
 
         // Reset for AI Player
@@ -1223,8 +1217,6 @@ void ASaT_GameMode::ResetGame()
         {
             // Reset AI player placement flags
             RandomPlayer->PlacedUnitsCount = 0;
-
-            UE_LOG(LogTemp, Warning, TEXT("Reset AI Player placement flags"));
         }
     }
 
@@ -1253,12 +1245,4 @@ void ASaT_GameMode::ResetGame()
     // Force update of game HUD
     UpdateGameHUD();
 
-    // Additional verification logging
-    UE_LOG(LogTemp, Warning, TEXT("Game Reset Verification:"));
-    UE_LOG(LogTemp, Warning, TEXT("Current Phase: %d"), GameInstance->GetGamePhase());
-    UE_LOG(LogTemp, Warning, TEXT("Is Player Turn: %s"), GameInstance->bIsPlayerTurn ? TEXT("TRUE") : TEXT("FALSE"));
-    UE_LOG(LogTemp, Warning, TEXT("Human Units Placed: %d"), GameInstance->HumanUnitsPlaced);
-    UE_LOG(LogTemp, Warning, TEXT("AI Units Placed: %d"), GameInstance->AIUnitsPlaced);
-
-    UE_LOG(LogTemp, Warning, TEXT("Game reset completed successfully"));
 }

@@ -136,8 +136,16 @@ public:
 
 	void DebugObstacles();
 
-	//public:	
-	//	// Called every frame
-	//	virtual void Tick(float DeltaTime) override;
+	bool EnsureGridConnectivity();
+	int32 IdentifyRegions(const TArray<bool>& ObstacleMap, TArray<int32>& RegionMap);
+	void FloodFillRegion(const TArray<bool>& ObstacleMap,
+		TArray<int32>& RegionMap,
+		TArray<bool>& Visited,
+		int32 StartX, int32 StartY,
+		int32 RegionId);
+	int32 FindLargestRegion(const TArray<int32>& RegionMap, int32 RegionCount);
+	bool ConnectRegions(TArray<bool>& ObstacleMap,
+		const TArray<int32>& RegionMap,
+		int32 LargestRegionId);
 
 };
