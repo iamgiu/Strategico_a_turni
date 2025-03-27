@@ -917,6 +917,16 @@ void ASaT_GameMode::AddFormattedMoveToLog(bool bIsPlayerUnit, const FString& Uni
                 static_cast<int32>(ToPosition.Y));
         }
     }
+    else if (ActionType == TEXT("Counterattack"))
+    {
+        // Format: PLAYER: Brawler counterattacks Sniper at (8,9) for 2 damage
+        MoveEntry = FString::Printf(TEXT("%s: %s counterattacks enemy at (%d,%d) for %d damage"),
+            *PlayerIdentifier,
+            *UnitType,
+            static_cast<int32>(ToPosition.X),
+            static_cast<int32>(ToPosition.Y),
+            Damage);
+    }
     else if (ActionType == TEXT("Skip"))
     {
         // Format: PLAYER: Sniper skips turn

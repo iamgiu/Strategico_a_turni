@@ -5,6 +5,8 @@
 #include "Kismet/GameplayStatics.h"
 #include "Sat_GameMode.h"
 #include "GridManager.h"
+#include "Sniper.h"
+#include "Brawler.h"
 #include "Engine/World.h"
 
 // Sets default values
@@ -275,8 +277,74 @@ bool AUnit::Attack(AUnit* Target)
     // Calculate damage
     int32 Damage = CalculateDamage();
 
+    // Log the attack for debugging
+    UE_LOG(LogTemp, Warning, TEXT("%s attacking %s for %d damage"),
+        *GetName(), *Target->GetName(), Damage);
+
     // Apply damage to the target
     Target->DamageTaken(Damage);
+
+    // Check if this is a Sniper unit
+    ASniper* AttackerSniper = Cast<ASniper>(this);
+    if (AttackerSniper)
+    {
+        // Check for counterattack conditions:
+        // 1. If the target is a Sniper
+        // 2. If the target is a Brawler and is adjacent (distance of 1)
+        ASniper* TargetSniper = Cast<ASniper>(Target);
+        ABrawler* TargetBrawler = Cast<ABrawler>(Target);
+
+        bool bShouldCounterattack = false;
+
+        // Condition 1: Target is a Sniper
+        if (TargetSniper)
+        {
+            bShouldCounterattack = true;
+            UE_LOG(LogTemp, Warning, TEXT("Counterattack: Sniper attacked another Sniper"));
+        }
+        // Condition 2: Target is a Brawler and is adjacent
+        else if (TargetBrawler)
+        {
+            // Calculate Manhattan distance (grid-based)
+            int32 Distance = FMath::Abs(Target->GridX - GridX) + FMath::Abs(Target->GridY - GridY);
+            if (Distance <= 1)
+            {
+                bShouldCounterattack = true;
+                UE_LOG(LogTemp, Warning, TEXT("Counterattack: Sniper attacked adjacent Brawler"));
+            }
+        }
+
+        // Execute counterattack if conditions are met
+        if (bShouldCounterattack && IsAlive() && Target->IsAlive())
+        {
+            // Calculate counterattack damage (random 1-3 as specified)
+            int32 CounterDamage = FMath::RandRange(1, 3);
+            UE_LOG(LogTemp, Warning, TEXT("%s receives counterattack damage of %d"),
+                *GetName(), CounterDamage);
+
+            // Apply counterattack damage to the attacking Sniper
+            DamageTaken(CounterDamage);
+
+            // Log the counterattack result
+            AGameModeBase* GameModeBase = UGameplayStatics::GetGameMode(GetWorld());
+            ASaT_GameMode* GameMode = Cast<ASaT_GameMode>(GameModeBase);
+            if (GameMode)
+            {
+                FString UnitType = Target->UnitTypeDisplayName;
+                GameMode->AddFormattedMoveToLog(
+                    Target->bIsPlayerUnit, // IsPlayerUnit based on the target
+                    UnitType,
+                    TEXT("Counterattack"),
+                    FVector2D(Target->GridX, Target->GridY), // From position
+                    FVector2D(GridX, GridY), // To position (this unit)
+                    CounterDamage // Damage dealt
+                );
+            }
+        }
+    }
+
+    // Mark this unit as having attacked
+    bHasAttackedThisTurn = true;
 
     // Return true if the attack was successful
     return true;

@@ -129,7 +129,7 @@ void USaT_GameInstance::SwitchTurn()
     bIsPlayerTurn = !bIsPlayerTurn;
 
     // If we've completed a full turn cycle (both players have moved)
-    if (bIsPlayerTurn) // When returning to human player
+    if (bIsPlayerTurn) 
     {
         // Increment turn counter
         CurrentTurnNumber++;
@@ -147,8 +147,6 @@ void USaT_GameInstance::SwitchTurn()
         SetGamePhase(EGamePhase::PLAYING);
         UE_LOG(LogTemp, Warning, TEXT("Setup phase complete! Transitioning to PLAYING phase."));
 
-        // REMOVE THIS LINE - Don't override the turn when transitioning phases
-        // bIsPlayerTurn = bPlayerStartsFirst;
     }
 
     // Log the state after switching

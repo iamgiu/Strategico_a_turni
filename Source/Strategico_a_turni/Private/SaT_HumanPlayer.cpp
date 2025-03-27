@@ -430,9 +430,8 @@ void ASaT_HumanPlayer::PlaceUnit(int32 GridX, int32 GridY, bool bIsSniper)
                 FVector2D(GridX, GridY)
             );
         }
+
         // END TURN AUTOMATICALLY AFTER PLACING A UNIT
-        // This is the key fix - end turn immediately after placing a unit
-        // just like the AI player does
         FTimerHandle TimerHandle;
         GetWorld()->GetTimerManager().SetTimer(TimerHandle, this, &ASaT_HumanPlayer::EndTurn, 0.5f, false);
     }
@@ -782,7 +781,7 @@ void ASaT_HumanPlayer::ShowUnitSelectionWidget()
         if (GameInstance->GetGamePhase() == EGamePhase::SETUP)
         {
             int32 CurrentTurnNumber = GameInstance->CurrentTurnNumber;
-            int32 ExpectedUnits = (CurrentTurnNumber + 1) / 2;
+            int32 ExpectedUnits = 2; 
 
             // If we've placed the expected number of units for this turn, don't show widget
             if (PlacedUnitsCount >= ExpectedUnits)
