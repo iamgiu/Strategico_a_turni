@@ -108,6 +108,10 @@ public:
 
     static bool CheckMutualDestruction(AUnit* Attacker, AUnit* Target);
 
+    // Check if target is within attack range
+    UFUNCTION(BlueprintCallable, Category = "Combat")
+    bool IsTargetInRange(const AUnit* Target) const;
+
 protected:
     // Called when the game starts or when spawned
     virtual void BeginPlay() override;
@@ -119,9 +123,5 @@ protected:
     // Position on the grid
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Unit")
     FVector2D UnitGridPosition;
-
-    // Check if target is within attack range
-    UFUNCTION(BlueprintCallable, Category = "Combat")
-    bool IsTargetInRange(const AUnit* Target) const;
 
 };

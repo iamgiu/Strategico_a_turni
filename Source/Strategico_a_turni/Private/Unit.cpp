@@ -274,19 +274,20 @@ bool AUnit::Attack(AUnit* Target)
         return false;
     }
 
-    // Calculate damage
+    // Calculate main attack damage
     int32 Damage = CalculateDamage();
 
-    // Log the attack for debugging
-    UE_LOG(LogTemp, Warning, TEXT("%s attacking %s for %d damage"),
-        *GetName(), *Target->GetName(), Damage);
+    // Store the attacker's and target's health before attack for damage calculation
+    int32 AttackerHpBefore = this->Hp;
+    int32 TargetHpBefore = Target->Hp;
 
-    // Apply damage to the target
-    Target->DamageTaken(Damage);
+    // Variables to track counterattack
+    bool bShouldCounterattack = false;
+    int32 CounterDamage = 0;
 
-    // Check if this is a Sniper unit
-    ASniper* AttackerSniper = Cast<ASniper>(this);
-    if (AttackerSniper)
+    // IMPORTANT: Calculate counterattack damage BEFORE applying any damage
+    // This ensures both units can "die together" if appropriate
+    if (Target->IsAlive())
     {
         // Check for counterattack conditions:
         // 1. If the target is a Sniper
@@ -294,66 +295,110 @@ bool AUnit::Attack(AUnit* Target)
         ASniper* TargetSniper = Cast<ASniper>(Target);
         ABrawler* TargetBrawler = Cast<ABrawler>(Target);
 
-        bool bShouldCounterattack = false;
-
         // Condition 1: Target is a Sniper
         if (TargetSniper)
         {
             bShouldCounterattack = true;
-            UE_LOG(LogTemp, Warning, TEXT("Counterattack: Sniper attacked another Sniper"));
         }
         // Condition 2: Target is a Brawler and is adjacent
         else if (TargetBrawler)
         {
             // Calculate Manhattan distance (grid-based)
-            int32 Distance = FMath::Abs(Target->GridX - GridX) + FMath::Abs(Target->GridY - GridY);
+            int32 Distance = FMath::Abs(Target->GridX - GridX) +
+                FMath::Abs(Target->GridY - GridY);
             if (Distance <= 1)
             {
                 bShouldCounterattack = true;
-                UE_LOG(LogTemp, Warning, TEXT("Counterattack: Sniper attacked adjacent Brawler"));
             }
         }
 
-        // Execute counterattack if conditions are met
-        if (bShouldCounterattack && IsAlive() && Target->IsAlive())
+        // Calculate counterattack damage if conditions are met
+        if (bShouldCounterattack)
         {
             // Calculate counterattack damage (random 1-3 as specified)
-            int32 CounterDamage = FMath::RandRange(1, 3);
-            UE_LOG(LogTemp, Warning, TEXT("%s receives counterattack damage of %d"),
-                *GetName(), CounterDamage);
-
-            // Apply counterattack damage to the attacking Sniper
-            DamageTaken(CounterDamage);
-
-            // Log the counterattack result
-            AGameModeBase* GameModeBase = UGameplayStatics::GetGameMode(GetWorld());
-            ASaT_GameMode* GameMode = Cast<ASaT_GameMode>(GameModeBase);
-            if (GameMode)
-            {
-                FString UnitType = Target->UnitTypeDisplayName;
-                GameMode->AddFormattedMoveToLog(
-                    Target->bIsPlayerUnit, // IsPlayerUnit based on the target
-                    UnitType,
-                    TEXT("Counterattack"),
-                    FVector2D(Target->GridX, Target->GridY), // From position
-                    FVector2D(GridX, GridY), // To position (this unit)
-                    CounterDamage // Damage dealt
-                );
-            }
+            CounterDamage = FMath::RandRange(1, 3);
         }
     }
 
-    // Check for mutual destruction before processing attack
-    bool bMutualDestruction = CheckMutualDestruction(this, Target);
+    // IMPORTANT: Apply BOTH damages AFTER calculation
+    // This allows both units to "die together" in case of mutual destruction
 
-    if (bMutualDestruction)
+    // First apply main attack damage to target
+    UE_LOG(LogTemp, Warning, TEXT("%s attacking %s for %d damage"),
+        *GetName(), *Target->GetName(), Damage);
+    Target->DamageTaken(Damage);
+
+    // Then apply counterattack damage to attacker (if applicable)
+    if (bShouldCounterattack && CounterDamage > 0)
     {
-        // Notify game mode about draw condition
+        UE_LOG(LogTemp, Warning, TEXT("%s counterattacking %s for %d damage"),
+            *Target->GetName(), *GetName(), CounterDamage);
+        DamageTaken(CounterDamage);
+    }
+
+    // Calculate actual damages dealt
+    int32 ActualDamage = TargetHpBefore - Target->Hp;
+    int32 ActualCounterDamage = AttackerHpBefore - this->Hp;
+
+    // Log the counterattack result if there was one
+    if (bShouldCounterattack && CounterDamage > 0)
+    {
         AGameModeBase* GameModeBase = UGameplayStatics::GetGameMode(GetWorld());
         ASaT_GameMode* GameMode = Cast<ASaT_GameMode>(GameModeBase);
         if (GameMode)
         {
-            GameMode->HandleDrawCondition();
+            FString UnitType = Target->UnitTypeDisplayName;
+            GameMode->AddFormattedMoveToLog(
+                Target->bIsPlayerUnit, // IsPlayerUnit based on the target
+                UnitType,
+                TEXT("Counterattack"),
+                FVector2D(Target->GridX, Target->GridY), // From position
+                FVector2D(GridX, GridY), // To position (this unit)
+                ActualCounterDamage // Damage dealt
+            );
+        }
+    }
+
+    if (!this->IsAlive() && !Target->IsAlive())
+    {
+        // Count ALL remaining units on both sides
+        TArray<AActor*> AllUnits;
+        UGameplayStatics::GetAllActorsOfClass(GetWorld(), AUnit::StaticClass(), AllUnits);
+
+        int32 HumanUnitsAlive = 0;
+        int32 AIUnitsAlive = 0;
+
+        for (AActor* UnitActor : AllUnits)
+        {
+            AUnit* Unit = Cast<AUnit>(UnitActor);
+            if (Unit && Unit != this && Unit != Target && Unit->IsAlive())
+            {
+                if (Unit->bIsPlayerUnit)
+                    HumanUnitsAlive++;
+                else
+                    AIUnitsAlive++;
+            }
+        }
+
+        UE_LOG(LogTemp, Warning, TEXT("Checking after mutual kill: Human units alive: %d, AI units alive: %d"),
+            HumanUnitsAlive, AIUnitsAlive);
+
+        // ONLY trigger a draw if BOTH sides have NO units remaining
+        if (HumanUnitsAlive == 0 && AIUnitsAlive == 0)
+        {
+            UE_LOG(LogTemp, Warning, TEXT("TRUE MUTUAL DESTRUCTION: All units eliminated - DRAW"));
+
+            AGameModeBase* GameModeBase = UGameplayStatics::GetGameMode(GetWorld());
+            ASaT_GameMode* GameMode = Cast<ASaT_GameMode>(GameModeBase);
+            if (GameMode)
+            {
+                GameMode->HandleDrawCondition();
+            }
+        }
+        else
+        {
+            UE_LOG(LogTemp, Warning, TEXT("Units killed each other, but other units remain: Human=%d, AI=%d"),
+                HumanUnitsAlive, AIUnitsAlive);
         }
     }
 
@@ -390,17 +435,81 @@ bool AUnit::IsTargetInRange(const AUnit* Target) const
 
 bool AUnit::CheckMutualDestruction(AUnit* Attacker, AUnit* Target)
 {
+    // Validate inputs
     if (!Attacker || !Target)
         return false;
 
-    // Calculate attack and counterattack damages
-    int32 AttackDamage = Attacker->CalculateDamage();
-    int32 CounterAttackDamage = FMath::RandRange(1, 3);
+    // Verify both units are still alive
+    if (!Attacker->IsAlive() || !Target->IsAlive())
+        return false;
 
-    // Predict HP after attack and counterattack
-    int32 AttackerFinalHP = Attacker->Hp - CounterAttackDamage;
-    int32 TargetFinalHP = Target->Hp - AttackDamage;
+    // Check if both units are the last ones alive for their respective teams
+    TArray<AActor*> AllUnits;
+    UGameplayStatics::GetAllActorsOfClass(Attacker->GetWorld(), AUnit::StaticClass(), AllUnits);
 
-    // Check for mutual destruction
-    return (AttackerFinalHP <= 0 && TargetFinalHP <= 0);
+    int32 PlayerUnitsAlive = 0;
+    int32 AIUnitsAlive = 0;
+
+    // Count all living units (excluding the two units we're checking)
+    for (AActor* UnitActor : AllUnits)
+    {
+        AUnit* Unit = Cast<AUnit>(UnitActor);
+        if (Unit && Unit->IsAlive() && Unit != Attacker && Unit != Target)
+        {
+            if (Unit->bIsPlayerUnit)
+                PlayerUnitsAlive++;
+            else
+                AIUnitsAlive++;
+        }
+    }
+
+    // If there are other units alive on either side, this is not a mutual destruction scenario
+    if (PlayerUnitsAlive > 0 || AIUnitsAlive > 0)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("Not a mutual destruction scenario - other units exist"));
+        return false;
+    }
+
+    // Special draw condition: only valid for two snipers
+    ASniper* AttackerSniper = Cast<ASniper>(Attacker);
+    ASniper* TargetSniper = Cast<ASniper>(Target);
+    if (!AttackerSniper || !TargetSniper)
+    {
+        // If either unit is not a sniper, no draw
+        UE_LOG(LogTemp, Warning, TEXT("Not a mutual destruction scenario - units aren't both snipers"));
+        return false;
+    }
+
+    // Both units must be the last of their respective teams and have 1 HP
+    bool AttackerIsHuman = Attacker->bIsPlayerUnit;
+    bool TargetIsHuman = Target->bIsPlayerUnit;
+
+    // They must be on opposite teams
+    if (AttackerIsHuman == TargetIsHuman)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("Not a mutual destruction scenario - units on same team"));
+        return false;
+    }
+
+    // Both must have 1 HP to trigger mutual destruction
+    if (Attacker->Hp != 1 || Target->Hp != 1)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("Not a mutual destruction scenario - units don't both have 1 HP"));
+        return false;
+    }
+
+    // Both must be in range of each other for mutual destruction
+    bool AttackerCanHitTarget = Attacker->IsTargetInRange(Target);
+    bool TargetCanHitAttacker = Target->IsTargetInRange(Attacker);
+
+    if (!AttackerCanHitTarget || !TargetCanHitAttacker)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("Not a mutual destruction scenario - units not in range of each other"));
+        return false;
+    }
+
+    UE_LOG(LogTemp, Warning, TEXT("MUTUAL DESTRUCTION CHECK: %s and %s would kill each other"),
+        *Attacker->GetName(), *Target->GetName());
+
+    return true;
 }

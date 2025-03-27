@@ -44,6 +44,13 @@ ASaT_GameMode::ASaT_GameMode()
     {
         GameOverWidgetClass = DefaultGameOverWidgetClass.Class;
     }
+
+    static ConstructorHelpers::FClassFinder<UUserWidget> DefaultDifficultySelectionWidgetClass(TEXT("/Game/UI/WBP_DifficultySelection"));
+    if (DefaultDifficultySelectionWidgetClass.Succeeded())
+    {
+        DifficultySelectionWidgetClass = DefaultDifficultySelectionWidgetClass.Class;
+    }
+
 }
 
 void ASaT_GameMode::BeginPlay()
@@ -583,8 +590,14 @@ bool ASaT_GameMode::CheckGameOver()
             return true;
         }
 
-        // Check for potential draw conditions
-        bool bPotentialDraw = CheckPotentialDraw(HumanUnits, AIUnits);
+        // Only check for potential draw if we're in the PLAYING phase
+        // and both players still have EXACTLY ONE unit alive
+        bool bPotentialDraw = false;
+        if (HumanUnitCount == 1 && AIUnitCount == 1)
+        {
+            bPotentialDraw = CheckPotentialDraw(HumanUnits, AIUnits);
+        }
+
         if (bPotentialDraw)
         {
             // Set game phase to GAMEOVER
@@ -612,54 +625,163 @@ bool ASaT_GameMode::CheckGameOver()
     return false;
 }
 
-// New method to check for potential draw conditions
 bool ASaT_GameMode::CheckPotentialDraw(const TArray<AUnit*>& HumanUnits, const TArray<AUnit*>& AIUnits)
 {
-    // Implement draw condition logic
-    // For example, check if both sides would destroy each other in the next attack
-    for (AUnit* HumanUnit : HumanUnits)
-    {
-        for (AUnit* AIUnit : AIUnits)
-        {
-            // Check if this specific pair of units would result in mutual destruction
-            if (AUnit::CheckMutualDestruction(HumanUnit, AIUnit))
-            {
-                UE_LOG(LogTemp, Warning, TEXT("Potential draw detected between %s and %s"),
-                    *HumanUnit->GetName(), *AIUnit->GetName());
-                return true;
-            }
-        }
-    }
+    // Only proceed with the draw check if we have exactly one unit on each side
+    if (HumanUnits.Num() != 1 || AIUnits.Num() != 1)
+        return false;
 
-    return false;
+    // Get the remaining units
+    AUnit* HumanUnit = HumanUnits[0];
+    AUnit* AIUnit = AIUnits[0];
+
+    // Verify units are still alive as an extra safety check
+    if (!HumanUnit->IsAlive() || !AIUnit->IsAlive())
+        return false;
+
+    // Special draw condition: only happens with two snipers
+    ASniper* HumanSniper = Cast<ASniper>(HumanUnit);
+    ASniper* AISniper = Cast<ASniper>(AIUnit);
+
+    // Draw condition requires BOTH to be snipers
+    if (!HumanSniper || !AISniper)
+        return false;
+
+    // For mutual destruction, BOTH need:
+    // 1. To be within attack range of each other
+    // 2. Have HP so low that counterattack would kill them
+
+    // First, check if they can attack each other
+    bool HumanCanAttackAI = HumanSniper->IsTargetInRange(AISniper);
+    bool AICanAttackHuman = AISniper->IsTargetInRange(HumanSniper);
+
+    if (!HumanCanAttackAI || !AICanAttackHuman)
+        return false;
+
+    // We need to simulate counterattack damage 
+    int32 CounterAttackDamage = 1; // Minimum counterattack damage
+
+    // Only declare draw if both units would kill each other with minimum counterattack
+    bool HumanWouldDie = (HumanSniper->Hp <= CounterAttackDamage);
+    bool AIWouldDie = (AISniper->Hp <= CounterAttackDamage);
+
+    UE_LOG(LogTemp, Warning, TEXT("DRAW CHECK: Human HP: %d, AI HP: %d, CounterDamage: %d, Both would die: %s"),
+        HumanSniper->Hp, AISniper->Hp, CounterAttackDamage,
+        (HumanWouldDie && AIWouldDie) ? TEXT("YES") : TEXT("NO"));
+
+    return HumanWouldDie && AIWouldDie;
 }
 
 void ASaT_GameMode::HandleDrawCondition()
 {
-    // Get the game instance
-    USaT_GameInstance* GameInstance = Cast<USaT_GameInstance>(UGameplayStatics::GetGameInstance(GetWorld()));
-    if (GameInstance)
+    // Count ALL units on the board for an absolute verification
+    TArray<AActor*> AllUnits;
+    UGameplayStatics::GetAllActorsOfClass(GetWorld(), AUnit::StaticClass(), AllUnits);
+
+    // Count living units by team
+    int32 HumanUnitsAlive = 0;
+    int32 AIUnitsAlive = 0;
+    TArray<AUnit*> LivingHumanUnits;
+    TArray<AUnit*> LivingAIUnits;
+
+    for (AActor* UnitActor : AllUnits)
     {
-        // Set game phase to GAMEOVER
-        GameInstance->SetGamePhase(EGamePhase::GAMEOVER);
-
-        // Set winner text to indicate a draw
-        WinnerText = TEXT("DRAW!");
-
-        // Show game over widget
-        ShowGameOverWidget(true);
-
-        // Notify players about the draw
-        for (auto PlayerInterface : Players)
+        AUnit* Unit = Cast<AUnit>(UnitActor);
+        if (Unit && Unit->IsAlive())
         {
-            if (PlayerInterface)
+            if (Unit->bIsPlayerUnit)
             {
-                PlayerInterface->OnDraw(); // You'll need to add this method to the ISaT_PlayerInterface
+                HumanUnitsAlive++;
+                LivingHumanUnits.Add(Unit);
+            }
+            else
+            {
+                AIUnitsAlive++;
+                LivingAIUnits.Add(Unit);
             }
         }
+    }
 
-        // Log the draw condition
-        UE_LOG(LogTemp, Warning, TEXT("Game ended in a DRAW due to mutual destruction!"));
+    UE_LOG(LogTemp, Warning, TEXT("Draw condition check: Human units alive: %d, AI units alive: %d"),
+        HumanUnitsAlive, AIUnitsAlive);
+
+    // There are 3 valid draw cases:
+    // 1. No units left on either side (mutual destruction happened)
+    // 2. Each team has exactly ONE unit, both are Snipers, both at 1 HP, and in range of each other
+    // 3. Explicit decision based on turn limit (not implemented yet)
+
+    bool bValidDrawCondition = false;
+
+    // Case 1: No units left on either side
+    if (HumanUnitsAlive == 0 && AIUnitsAlive == 0)
+    {
+        bValidDrawCondition = true;
+        UE_LOG(LogTemp, Warning, TEXT("Draw condition: No units left on either side"));
+    }
+    // Case 2: One unit each, both are snipers at 1 HP
+    else if (HumanUnitsAlive == 1 && AIUnitsAlive == 1)
+    {
+        // Verify both are snipers
+        AUnit* HumanUnit = LivingHumanUnits[0];
+        AUnit* AIUnit = LivingAIUnits[0];
+
+        ASniper* HumanSniper = Cast<ASniper>(HumanUnit);
+        ASniper* AISniper = Cast<ASniper>(AIUnit);
+
+        if (!HumanSniper || !AISniper)
+        {
+            // If either unit is not a sniper, this is not a valid draw
+            UE_LOG(LogTemp, Warning, TEXT("Invalid draw: Units are not both snipers"));
+            return;
+        }
+
+        // Both must have 1 HP and be in range of each other
+        if (HumanSniper->Hp == 1 && AISniper->Hp == 1 &&
+            HumanSniper->IsTargetInRange(AISniper) && AISniper->IsTargetInRange(HumanSniper))
+        {
+            bValidDrawCondition = true;
+            UE_LOG(LogTemp, Warning, TEXT("Draw condition: Both snipers at 1 HP and in range"));
+        }
+        else
+        {
+            UE_LOG(LogTemp, Warning, TEXT("Invalid draw: Snipers must both have 1 HP and be in range"));
+            return;
+        }
+    }
+    else
+    {
+        // If there are still units left on either side, this is not a draw
+        UE_LOG(LogTemp, Warning, TEXT("Invalid draw: Units remain on at least one side"));
+        return;
+    }
+
+    // If we reach here with a valid draw condition, proceed with the draw
+    if (bValidDrawCondition)
+    {
+        USaT_GameInstance* GameInstance = Cast<USaT_GameInstance>(UGameplayStatics::GetGameInstance(GetWorld()));
+        if (GameInstance)
+        {
+            // Set game phase to GAMEOVER
+            GameInstance->SetGamePhase(EGamePhase::GAMEOVER);
+
+            // Set winner text to indicate a draw
+            WinnerText = TEXT("DRAW!");
+
+            // Show game over widget
+            ShowGameOverWidget(true);
+
+            // Notify players about the draw
+            for (auto PlayerInterface : Players)
+            {
+                if (PlayerInterface)
+                {
+                    PlayerInterface->OnDraw();
+                }
+            }
+
+            // Log the draw
+            UE_LOG(LogTemp, Warning, TEXT("GAME OVER: Match ended in a DRAW!"));
+        }
     }
 }
 
