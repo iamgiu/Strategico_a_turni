@@ -804,10 +804,10 @@ void ASaT_GameMode::UpdateGameHUD()
     AISniperHP = 0;
     AIBrawlerHP = 0;
 
-    PlayerSniperPos = TEXT("(--,--)");
-    PlayerBrawlerPos = TEXT("(--,--)");
-    AISniperPos = TEXT("(--,--)");
-    AIBrawlerPos = TEXT("(--,--)");
+    PlayerSniperPos = TEXT("--");
+    PlayerBrawlerPos = TEXT("--");
+    AISniperPos = TEXT("--");
+    AIBrawlerPos = TEXT("--");
 
     // Update unit information
     for (AActor* UnitActor : AllUnits)
@@ -822,13 +822,13 @@ void ASaT_GameMode::UpdateGameHUD()
                 {
                     // Update player sniper info
                     PlayerSniperHP = Unit->Hp;
-                    PlayerSniperPos = FString::Printf(TEXT("(%d,%d)"), Unit->GridX, Unit->GridY);
+                    PlayerSniperPos = AGridManager::ConvertToLetterNumberFormat(Unit->GridX, Unit->GridY);
                 }
                 else if (Cast<ABrawler>(Unit))
                 {
                     // Update player brawler info
                     PlayerBrawlerHP = Unit->Hp;
-                    PlayerBrawlerPos = FString::Printf(TEXT("(%d,%d)"), Unit->GridX, Unit->GridY);
+                    PlayerBrawlerPos = AGridManager::ConvertToLetterNumberFormat(Unit->GridX, Unit->GridY);
                 }
             }
             else
@@ -838,13 +838,13 @@ void ASaT_GameMode::UpdateGameHUD()
                 {
                     // Update AI sniper info
                     AISniperHP = Unit->Hp;
-                    AISniperPos = FString::Printf(TEXT("(%d,%d)"), Unit->GridX, Unit->GridY);
+                    AISniperPos = AGridManager::ConvertToLetterNumberFormat(Unit->GridX, Unit->GridY);
                 }
                 else if (Cast<ABrawler>(Unit))
                 {
                     // Update AI brawler info
                     AIBrawlerHP = Unit->Hp;
-                    AIBrawlerPos = FString::Printf(TEXT("(%d,%d)"), Unit->GridX, Unit->GridY);
+                    AIBrawlerPos = AGridManager::ConvertToLetterNumberFormat(Unit->GridX, Unit->GridY);
                 }
             }
         }
@@ -942,49 +942,48 @@ void ASaT_GameMode::AddFormattedMoveToLog(bool bIsPlayerUnit, const FString& Uni
     // Format the player identifier
     FString PlayerIdentifier = bIsPlayerUnit ? TEXT("PLAYER") : TEXT("AI");
 
+    // Convert grid coordinates to letter-number format
+    FString FromPosStr = AGridManager::ConvertToLetterNumberFormat(FromPosition.X, FromPosition.Y);
+    FString ToPosStr = AGridManager::ConvertToLetterNumberFormat(ToPosition.X, ToPosition.Y);
+
     // Format the move entry based on action type
     FString MoveEntry;
     if (ActionType == TEXT("Move"))
     {
-        // Format: PLAYER: Moved Sniper from (4,6) to (8,9)
-        MoveEntry = FString::Printf(TEXT("%s: Moved %s from (%d,%d) to (%d,%d)"),
+        // Format: PLAYER: Moved Sniper from B4 to D6
+        MoveEntry = FString::Printf(TEXT("%s: Moved %s from %s to %s"),
             *PlayerIdentifier,
             *UnitType,
-            static_cast<int32>(FromPosition.X),
-            static_cast<int32>(FromPosition.Y),
-            static_cast<int32>(ToPosition.X),
-            static_cast<int32>(ToPosition.Y));
+            *FromPosStr,
+            *ToPosStr);
     }
     else if (ActionType == TEXT("Attack"))
     {
         if (Damage > 0)
         {
-            // Format: PLAYER: Sniper attacks enemy at (8,9) for 7 damage
-            MoveEntry = FString::Printf(TEXT("%s: %s attacks enemy at (%d,%d) for %d damage"),
+            // Format: PLAYER: Sniper attacks enemy at G8 for 7 damage
+            MoveEntry = FString::Printf(TEXT("%s: %s attacks enemy at %s for %d damage"),
                 *PlayerIdentifier,
                 *UnitType,
-                static_cast<int32>(ToPosition.X),
-                static_cast<int32>(ToPosition.Y),
+                *ToPosStr,
                 Damage);
         }
         else
         {
-            // Format without damage value: PLAYER: Sniper attacks enemy at (8,9)
-            MoveEntry = FString::Printf(TEXT("%s: %s attacks enemy at (%d,%d)"),
+            // Format without damage value: PLAYER: Sniper attacks enemy at G8
+            MoveEntry = FString::Printf(TEXT("%s: %s attacks enemy at %s"),
                 *PlayerIdentifier,
                 *UnitType,
-                static_cast<int32>(ToPosition.X),
-                static_cast<int32>(ToPosition.Y));
+                *ToPosStr);
         }
     }
     else if (ActionType == TEXT("Counterattack"))
     {
-        // Format: PLAYER: Brawler counterattacks Sniper at (8,9) for 2 damage
-        MoveEntry = FString::Printf(TEXT("%s: %s counterattacks enemy at (%d,%d) for %d damage"),
+        // Format: PLAYER: Brawler counterattacks enemy at G8 for 2 damage
+        MoveEntry = FString::Printf(TEXT("%s: %s counterattacks enemy at %s for %d damage"),
             *PlayerIdentifier,
             *UnitType,
-            static_cast<int32>(ToPosition.X),
-            static_cast<int32>(ToPosition.Y),
+            *ToPosStr,
             Damage);
     }
     else if (ActionType == TEXT("Skip"))
@@ -996,12 +995,11 @@ void ASaT_GameMode::AddFormattedMoveToLog(bool bIsPlayerUnit, const FString& Uni
     }
     else if (ActionType == TEXT("Place"))
     {
-        // Format: PLAYER: Placed Sniper at position (8,9)
-        MoveEntry = FString::Printf(TEXT("%s: Placed %s at position (%d,%d)"),
+        // Format: PLAYER: Placed Sniper at position G8
+        MoveEntry = FString::Printf(TEXT("%s: Placed %s at position %s"),
             *PlayerIdentifier,
             *UnitType,
-            static_cast<int32>(ToPosition.X),
-            static_cast<int32>(ToPosition.Y));
+            *ToPosStr);
     }
 
     // IMPROVED: Check for duplicates in the raw move history (without turn numbers)
@@ -1057,7 +1055,6 @@ void ASaT_GameMode::AddFormattedMoveToLog(bool bIsPlayerUnit, const FString& Uni
     }
 }
 
-// Update GetFormattedGameLog to use the raw history without turn numbers
 FString ASaT_GameMode::GetFormattedGameLog() const
 {
     FString History;

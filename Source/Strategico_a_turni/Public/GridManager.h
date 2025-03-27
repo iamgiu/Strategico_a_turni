@@ -148,4 +148,52 @@ public:
 		const TArray<int32>& RegionMap,
 		int32 LargestRegionId);
 
+	// Convert grid coordinates to letter-number format (e.g., B4)
+	static FString ConvertToLetterNumberFormat(int32 GridX, int32 GridY)
+	{
+		// Convert Y to a letter (A-Y)
+		TCHAR Letter = 'A' + GridY;
+
+		// X is already a number (1-25)
+		int32 Number = GridX + 1;
+
+		// Return in "Letter+Number" format
+		return FString::Printf(TEXT("%c%d"), Letter, Number);
+	}
+
+	// Convert letter-number format back to grid coordinates
+	static bool ConvertFromLetterNumberFormat(const FString& Coordinate, int32& OutGridX, int32& OutGridY)
+	{
+		if (Coordinate.Len() < 2)
+			return false;
+
+		// First character is the letter (Y coordinate)
+		TCHAR Letter = Coordinate[0];
+		if (Letter >= 'A' && Letter <= 'Y')
+		{
+			OutGridY = Letter - 'A';
+		}
+		else if (Letter >= 'a' && Letter <= 'y')
+		{
+			OutGridY = Letter - 'a';
+		}
+		else
+		{
+			return false;
+		}
+
+		// Rest of the string should be the number (X coordinate)
+		FString NumberStr = Coordinate.Mid(1);
+		int32 Number = FCString::Atoi(*NumberStr);
+
+		// Check if number is in valid range
+		if (Number >= 1 && Number <= 25)
+		{
+			OutGridX = Number - 1;
+			return true;
+		}
+
+		return false;
+	}
+
 };
