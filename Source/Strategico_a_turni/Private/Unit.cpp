@@ -343,6 +343,20 @@ bool AUnit::Attack(AUnit* Target)
         }
     }
 
+    // Check for mutual destruction before processing attack
+    bool bMutualDestruction = CheckMutualDestruction(this, Target);
+
+    if (bMutualDestruction)
+    {
+        // Notify game mode about draw condition
+        AGameModeBase* GameModeBase = UGameplayStatics::GetGameMode(GetWorld());
+        ASaT_GameMode* GameMode = Cast<ASaT_GameMode>(GameModeBase);
+        if (GameMode)
+        {
+            GameMode->HandleDrawCondition();
+        }
+    }
+
     // Mark this unit as having attacked
     bHasAttackedThisTurn = true;
 
@@ -372,4 +386,21 @@ bool AUnit::IsTargetInRange(const AUnit* Target) const
 
     // Check if the target is within range
     return Distance <= RangeAttack;
+}
+
+bool AUnit::CheckMutualDestruction(AUnit* Attacker, AUnit* Target)
+{
+    if (!Attacker || !Target)
+        return false;
+
+    // Calculate attack and counterattack damages
+    int32 AttackDamage = Attacker->CalculateDamage();
+    int32 CounterAttackDamage = FMath::RandRange(1, 3);
+
+    // Predict HP after attack and counterattack
+    int32 AttackerFinalHP = Attacker->Hp - CounterAttackDamage;
+    int32 TargetFinalHP = Target->Hp - AttackDamage;
+
+    // Check for mutual destruction
+    return (AttackerFinalHP <= 0 && TargetFinalHP <= 0);
 }

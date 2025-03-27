@@ -36,10 +36,6 @@ protected:
 
 	virtual void SetupInputComponent() override;
 
-	// Funzioni per il movimento della camera
-	void PanCameraX(float Value);
-	void PanCameraY(float Value);
-
 	// Velocità di movimento della camera
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Camera")
 	float CameraPanSpeed = 1000.0f;

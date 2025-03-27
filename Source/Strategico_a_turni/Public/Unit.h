@@ -106,6 +106,8 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Combat")
     int32 CalculateDamage() const;
 
+    static bool CheckMutualDestruction(AUnit* Attacker, AUnit* Target);
+
 protected:
     // Called when the game starts or when spawned
     virtual void BeginPlay() override;
@@ -122,10 +124,4 @@ protected:
     UFUNCTION(BlueprintCallable, Category = "Combat")
     bool IsTargetInRange(const AUnit* Target) const;
 
-public:
-    // Called every frame
-    // virtual void Tick(float DeltaTime) override;
-
-    // Called to bind functionality to input
-    // virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;
 };

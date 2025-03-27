@@ -20,24 +20,12 @@ ASaT_HumanPlayer::ASaT_HumanPlayer()
 {
     PrimaryActorTick.bCanEverTick = true;
 
-    // Create the camera directly as root
+    // create a camera component
     Camera = CreateDefaultSubobject<UCameraComponent>(TEXT("Camera"));
+    //set the camera as RootComponent
     SetRootComponent(Camera);
 
-    // Configure camera for orthographic view
-    Camera->SetRelativeRotation(FRotator(-90, 0, 0)); // Look downward
-    Camera->ProjectionMode = ECameraProjectionMode::Orthographic;
-
-    // Calculate OrthoWidth based on grid size
-    // Assuming TileSize of 100 and a 25x25 grid
-    float GridSize = 25 * 100.0f;
-    Camera->OrthoWidth = GridSize * 2.1f; // Some margin around the grid
-
-    // Camera height - high enough to see the entire field
-    float CameraHeight = 2000.0f;
-    Camera->SetRelativeLocation(FVector(GridSize / 2, GridSize / 2, CameraHeight));
-
-       UnitSelectionWidget = nullptr;
+    UnitSelectionWidget = nullptr;
 
     // Adding hard-coded defaults for classes - these will be overridden by BP values if set
     static ConstructorHelpers::FClassFinder<ASniper> DefaultSniperClass(TEXT("/Game/Blueprints/BP_Sniper"));
@@ -117,24 +105,24 @@ void ASaT_HumanPlayer::BeginPlay()
     if (FoundGrids.Num() > 0)
     {
         GridManager = Cast<AGridManager>(FoundGrids[0]);
-        if (GridManager)
-        {
-            UE_LOG(LogTemp, Display, TEXT("GridManager found and assigned"));
+        //if (GridManager)
+        //{
+        //    UE_LOG(LogTemp, Display, TEXT("GridManager found and assigned"));
 
-            // Position camera above grid center
-            float GridSize = GridManager->Size * GridManager->TileSize;
-            float CameraHeight = 2000.0f;
+        //    // Position camera above grid center
+        //    float GridSize = GridManager->Size * GridManager->TileSize;
+        //    float CameraHeight = 2000.0f;
 
-            // Position camera at grid center
-            SetActorLocation(FVector(GridSize / 2, GridSize / 2, CameraHeight));
+        //    // Position camera at grid center
+        //    SetActorLocation(FVector(GridSize / 2, GridSize / 2, CameraHeight));
 
-            UE_LOG(LogTemp, Warning, TEXT("Camera positioned at grid center: X=%f, Y=%f, Z=%f"),
-                GridSize / 2, GridSize / 2, CameraHeight);
-        }
-        else
-        {
-            UE_LOG(LogTemp, Warning, TEXT("GridManager not found in scene!"));
-        }
+        //    UE_LOG(LogTemp, Warning, TEXT("Camera positioned at grid center: X=%f, Y=%f, Z=%f"),
+        //        GridSize / 2, GridSize / 2, CameraHeight);
+        //}
+        //else
+        //{
+        //    UE_LOG(LogTemp, Warning, TEXT("GridManager not found in scene!"));
+        //}
     }
 
     // Validate class references
@@ -315,7 +303,12 @@ void ASaT_HumanPlayer::OnLose()
 
 }
 
+void ASaT_HumanPlayer::OnDraw()
+{
 
+    UE_LOG(LogTemp, Warning, TEXT("Human Player: Game ended in a draw"));
+
+}
 
 // Implement HasPlacedAllUnits
 bool ASaT_HumanPlayer::HasPlacedAllUnits() const

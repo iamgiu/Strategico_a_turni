@@ -1268,3 +1268,8 @@ void ASaT_RandomPlayer::OnLose()
 {
     UE_LOG(LogTemp, Warning, TEXT("AI Player has lost!"));
 }
+
+void ASaT_RandomPlayer::OnDraw()
+{
+    UE_LOG(LogTemp, Warning, TEXT("AI Player: Game ended in a draw"));
+}

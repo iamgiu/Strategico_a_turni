@@ -30,6 +30,7 @@ public:
 	void TurnNextPlayer();
 	void EndTurn();
 	bool CheckGameOver();
+    bool CheckPotentialDraw(const TArray<AUnit*>& HumanUnits, const TArray<AUnit*>& AIUnits);
 
 	void UpdateGameHUD();
 
@@ -217,6 +218,8 @@ public:
 
     UFUNCTION(BlueprintCallable, Category = "Game")
     void OnHardModeSelected();
+
+    void HandleDrawCondition();
 
 protected:
 

@@ -19,5 +19,4 @@ ASniper::ASniper()
 void ASniper::BeginPlay()
 {
     Super::BeginPlay();
-    // Logiche aggiuntive specifiche per il comportamento dello Sniper
 }

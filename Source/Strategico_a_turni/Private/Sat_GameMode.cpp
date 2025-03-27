@@ -50,56 +50,40 @@ void ASaT_GameMode::BeginPlay()
 {
     Super::BeginPlay();
 
-    UE_LOG(LogTemp, Warning, TEXT("===== GAMEMODE BEGIN PLAY ====="));
-
-    // Instantiate GridManager if not already present
+    // First ensure we have a GridManager
     if (!Gmanager && GameManagerClass)
     {
-        UE_LOG(LogTemp, Warning, TEXT("Creating new GridManager instance..."));
         Gmanager = GetWorld()->SpawnActor<AGridManager>(GameManagerClass);
-
-        if (Gmanager)
-        {
-            UE_LOG(LogTemp, Warning, TEXT("GridManager successfully created!"));
-        }
-        else
-        {
-            UE_LOG(LogTemp, Error, TEXT("Failed to create GridManager! GameManagerClass valid: %s"),
-                GameManagerClass ? TEXT("YES") : TEXT("NO"));
-        }
-    }
-    else if (Gmanager)
-    {
-        UE_LOG(LogTemp, Warning, TEXT("GridManager already exists."));
-    }
-    else
-    {
-        UE_LOG(LogTemp, Error, TEXT("Cannot create GridManager: GameManagerClass is not set!"));
     }
 
     // As a fallback, try to find an existing GridManager in the world
     if (!Gmanager)
     {
-        UE_LOG(LogTemp, Warning, TEXT("Searching for existing GridManager in the world..."));
         TArray<AActor*> FoundGrids;
         UGameplayStatics::GetAllActorsOfClass(GetWorld(), AGridManager::StaticClass(), FoundGrids);
 
         if (FoundGrids.Num() > 0)
         {
             Gmanager = Cast<AGridManager>(FoundGrids[0]);
-            if (Gmanager)
-            {
-                UE_LOG(LogTemp, Warning, TEXT("Found existing GridManager in the world!"));
-            }
-        }
-        else
-        {
-            UE_LOG(LogTemp, Error, TEXT("No GridManager found in the world!"));
         }
     }
 
     // Initialize players
     InitializePlayers();
+
+    // Only position the camera if we have both a GridManager and a HumanPlayer
+    if (Gmanager && Players.IsValidIndex(0))
+    {
+        float CameraPosX = ((Gmanager->TileSize * Gmanager->Size) + ((Gmanager->Size - 1) * Gmanager->TileSize * Gmanager->CellPadding)) * 0.5f;
+        float Zposition = 2500.0f;
+        FVector CameraPos(CameraPosX, CameraPosX, Zposition);
+
+        ASaT_HumanPlayer* HumanPlayer = Cast<ASaT_HumanPlayer>(Players[0]->_getUObject());
+        if (HumanPlayer)
+        {
+            HumanPlayer->SetActorLocationAndRotation(CameraPos, FRotationMatrix::MakeFromX(FVector(0, 0, -1)).Rotator());
+        }
+    }
 
     // Get game instance and set game phase to SETUP
     USaT_GameInstance* GameInstance = Cast<USaT_GameInstance>(UGameplayStatics::GetGameInstance(GetWorld()));
@@ -107,23 +91,16 @@ void ASaT_GameMode::BeginPlay()
     {
         GameInstance->SetGamePhase(EGamePhase::SETUP);
     }
-    else
-    {
-        UE_LOG(LogTemp, Error, TEXT("Failed to get GameInstance!"));
-    }
 
-    // Auto start game after a short delay to ensure everything is initialized
+    // Schedule game start after a short delay
     if (Gmanager)
     {
-        UE_LOG(LogTemp, Warning, TEXT("GridManager is valid, scheduling game start..."));
         FTimerHandle TimerHandle;
         GetWorldTimerManager().SetTimer(TimerHandle, this, &ASaT_GameMode::StartGame, 2.0f, false);
-
-        // Set game to SETUP phase first, not directly to PLAYING
-        GameInstance = Cast<USaT_GameInstance>(UGameplayStatics::GetGameInstance(GetWorld()));
     }
 
-    if (MainGameHUDClass) // You need to set this reference in your Blueprint
+    // Create game HUD if class is set
+    if (MainGameHUDClass)
     {
         APlayerController* PC = UGameplayStatics::GetPlayerController(GetWorld(), 0);
         if (PC)
@@ -137,7 +114,6 @@ void ASaT_GameMode::BeginPlay()
     }
 
     ShowDifficultyWidget(true);
-
 }
 
 void ASaT_GameMode::ShowDifficultyWidget(bool bShow)
@@ -547,11 +523,13 @@ bool ASaT_GameMode::CheckGameOver()
     // Only check for game over during the playing phase
     if (GameInstance->GetGamePhase() == EGamePhase::PLAYING)
     {
-        // Check if any player has lost all units
+        // Count units for each player
         int32 HumanUnitCount = 0;
         int32 AIUnitCount = 0;
+        TArray<AUnit*> HumanUnits;
+        TArray<AUnit*> AIUnits;
 
-        // Count units for each player
+        // Get all units
         TArray<AActor*> AllUnits;
         UGameplayStatics::GetAllActorsOfClass(GetWorld(), AUnit::StaticClass(), AllUnits);
 
@@ -561,13 +539,19 @@ bool ASaT_GameMode::CheckGameOver()
             if (Unit && Unit->IsAlive())
             {
                 if (Unit->bIsPlayerUnit)
+                {
                     HumanUnitCount++;
+                    HumanUnits.Add(Unit);
+                }
                 else
+                {
                     AIUnitCount++;
+                    AIUnits.Add(Unit);
+                }
             }
         }
 
-        // Check if either player has no units left
+        // Check for standard win/lose conditions
         if (HumanUnitCount == 0 || AIUnitCount == 0)
         {
             // Set game phase to GAMEOVER
@@ -598,9 +582,85 @@ bool ASaT_GameMode::CheckGameOver()
 
             return true;
         }
+
+        // Check for potential draw conditions
+        bool bPotentialDraw = CheckPotentialDraw(HumanUnits, AIUnits);
+        if (bPotentialDraw)
+        {
+            // Set game phase to GAMEOVER
+            GameInstance->SetGamePhase(EGamePhase::GAMEOVER);
+
+            // Set draw text
+            WinnerText = TEXT("DRAW!");
+
+            // Show the game over widget
+            ShowGameOverWidget(true);
+
+            // Notify players of the draw
+            for (auto PlayerInterface : Players)
+            {
+                if (PlayerInterface)
+                {
+                    PlayerInterface->OnDraw();
+                }
+            }
+
+            return true;
+        }
     }
 
     return false;
+}
+
+// New method to check for potential draw conditions
+bool ASaT_GameMode::CheckPotentialDraw(const TArray<AUnit*>& HumanUnits, const TArray<AUnit*>& AIUnits)
+{
+    // Implement draw condition logic
+    // For example, check if both sides would destroy each other in the next attack
+    for (AUnit* HumanUnit : HumanUnits)
+    {
+        for (AUnit* AIUnit : AIUnits)
+        {
+            // Check if this specific pair of units would result in mutual destruction
+            if (AUnit::CheckMutualDestruction(HumanUnit, AIUnit))
+            {
+                UE_LOG(LogTemp, Warning, TEXT("Potential draw detected between %s and %s"),
+                    *HumanUnit->GetName(), *AIUnit->GetName());
+                return true;
+            }
+        }
+    }
+
+    return false;
+}
+
+void ASaT_GameMode::HandleDrawCondition()
+{
+    // Get the game instance
+    USaT_GameInstance* GameInstance = Cast<USaT_GameInstance>(UGameplayStatics::GetGameInstance(GetWorld()));
+    if (GameInstance)
+    {
+        // Set game phase to GAMEOVER
+        GameInstance->SetGamePhase(EGamePhase::GAMEOVER);
+
+        // Set winner text to indicate a draw
+        WinnerText = TEXT("DRAW!");
+
+        // Show game over widget
+        ShowGameOverWidget(true);
+
+        // Notify players about the draw
+        for (auto PlayerInterface : Players)
+        {
+            if (PlayerInterface)
+            {
+                PlayerInterface->OnDraw(); // You'll need to add this method to the ISaT_PlayerInterface
+            }
+        }
+
+        // Log the draw condition
+        UE_LOG(LogTemp, Warning, TEXT("Game ended in a DRAW due to mutual destruction!"));
+    }
 }
 
 void ASaT_GameMode::TurnNextPlayer()
@@ -1244,5 +1304,5 @@ void ASaT_GameMode::ResetGame()
 
     // Force update of game HUD
     UpdateGameHUD();
-
 }
+
