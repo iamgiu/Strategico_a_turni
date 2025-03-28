@@ -271,7 +271,7 @@ bool AUnit::Move(int32 NewGridX, int32 NewGridY)
  */
 bool AUnit::Attack(AUnit* Target)
 {
-    // Make sure target is valid and alive
+    // Validate target existence and liveliness
     if (!Target || !Target->IsAlive())
     {
         UE_LOG(LogTemp, Warning, TEXT("Attack failed: Invalid or dead target"));
@@ -285,57 +285,72 @@ bool AUnit::Attack(AUnit* Target)
         return false;
     }
 
-    // Calculate main attack damage
-    int32 Damage = CalculateDamage();
+    // Prevent attacking units on the same team
+    if (Target->bIsPlayerUnit == this->bIsPlayerUnit)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("Attack failed: Cannot attack units on the same team"));
+        return false;
+    }
 
-    // Store the attacker's and target's health before attack for damage calculation
+    // Calculate and apply main attack damage
+    int32 Damage = CalculateDamage();
     int32 AttackerHpBefore = this->Hp;
     int32 TargetHpBefore = Target->Hp;
 
-    // Variables to track counterattack
+    // Apply damage to the target
+    Target->DamageTaken(Damage);
+
+    // Initialize counterattack variables
     bool bShouldCounterattack = false;
     int32 CounterDamage = 0;
 
+    // Only process counterattack if target is still alive
     if (Target->IsAlive())
     {
-        // Check for counterattack conditions
-        ASniper* TargetSniper = Cast<ASniper>(Target);
-        ABrawler* TargetBrawler = Cast<ABrawler>(Target);
+        // Calculate Manhattan distance for range check
+        int32 Distance = FMath::Abs(Target->GridX - GridX) + FMath::Abs(Target->GridY - GridY);
 
-        if (TargetSniper)
-        {
-            bShouldCounterattack = true;
-        }
+        // Specific counterattack logic based on unit types
+        ASniper* AttackerAsSniper = Cast<ASniper>(this);
+        ASniper* TargetAsSniper = Cast<ASniper>(Target);
+        ABrawler* AttackerAsBrawler = Cast<ABrawler>(this);
+        ABrawler* TargetAsBrawler = Cast<ABrawler>(Target);
 
-        else if (TargetBrawler)
+        // Sniper counterattack rules
+        if (AttackerAsSniper)
         {
-            // Calculate Manhattan distance (grid-based)
-            int32 Distance = FMath::Abs(Target->GridX - GridX) +
-                FMath::Abs(Target->GridY - GridY);
-            if (Distance <= 1)
+            // Sniper receives counterattack if:
+            // 1. Target is another Sniper
+            // 2. Target is a Brawler at distance 1
+            if (TargetAsSniper || (TargetAsBrawler && Distance <= 1))
             {
                 bShouldCounterattack = true;
             }
         }
+        // Brawler counterattack rules
+        else if (AttackerAsBrawler)
+        {
+            // Brawlers do NOT counterattack other Brawlers
+            // This condition ensures no Brawler-to-Brawler counterattack
+            if (TargetAsBrawler == nullptr && Distance <= 1)
+            {
+                bShouldCounterattack = true;
+            }
+        }
+
+        // Perform counterattack if conditions are met
         if (bShouldCounterattack)
         {
-            // Calculate counterattack damage (random 1-3)
             CounterDamage = FMath::RandRange(1, 3);
+            DamageTaken(CounterDamage);
         }
-    }
-
-    Target->DamageTaken(Damage);
-
-    if (bShouldCounterattack && CounterDamage > 0)
-    {
-        DamageTaken(CounterDamage);
     }
 
     // Calculate actual damages dealt
     int32 ActualDamage = TargetHpBefore - Target->Hp;
     int32 ActualCounterDamage = AttackerHpBefore - this->Hp;
 
-    // Log the counterattack result if there was one
+    // Log counterattack details if applicable
     if (bShouldCounterattack && CounterDamage > 0)
     {
         AGameModeBase* GameModeBase = UGameplayStatics::GetGameMode(GetWorld());
@@ -344,19 +359,20 @@ bool AUnit::Attack(AUnit* Target)
         {
             FString UnitType = Target->UnitTypeDisplayName;
             GameMode->AddFormattedMoveToLog(
-                Target->bIsPlayerUnit, // IsPlayerUnit based on the target
+                Target->bIsPlayerUnit,
                 UnitType,
                 TEXT("Counterattack"),
-                FVector2D(Target->GridX, Target->GridY), // From position
-                FVector2D(GridX, GridY), // To position (this unit)
-                ActualCounterDamage // Damage dealt
+                FVector2D(Target->GridX, Target->GridY),
+                FVector2D(GridX, GridY),
+                ActualCounterDamage
             );
         }
     }
 
+    // Check for mutual destruction scenario
     if (!this->IsAlive() && !Target->IsAlive())
     {
-        // Count ALL remaining units on both sides
+        // Count remaining units on both sides
         TArray<AActor*> AllUnits;
         UGameplayStatics::GetAllActorsOfClass(GetWorld(), AUnit::StaticClass(), AllUnits);
 
@@ -375,6 +391,7 @@ bool AUnit::Attack(AUnit* Target)
             }
         }
 
+        // Handle draw condition if no units remain
         if (HumanUnitsAlive == 0 && AIUnitsAlive == 0)
         {
             AGameModeBase* GameModeBase = UGameplayStatics::GetGameMode(GetWorld());
@@ -394,7 +411,6 @@ bool AUnit::Attack(AUnit* Target)
     // Mark this unit as having attacked
     bHasAttackedThisTurn = true;
 
-    // Return true if the attack was successful
     return true;
 }
 
