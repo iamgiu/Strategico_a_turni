@@ -57,25 +57,25 @@ This is a turn-based strategic game developed as a final project for the PAA cou
 - ✅ Move history logging
 - ✅ AI with optimized movement algorithms (A*)
 
-##Screenshot
+## Screenshot
 
-#Game Start
+# Game Start
 ![start](https://github.com/user-attachments/assets/dd34540f-7be6-4894-bd54-95a06d6c1bda)
 
-#CoinFlip - Hard Mode
+# CoinFlip - Hard Mode
 ![image](https://github.com/user-attachments/assets/d4feaacc-0c9d-4569-bd58-7971eeecb101)
 
-#SetupPhase - Hard Mode
+# SetupPhase - Hard Mode
 ![image](https://github.com/user-attachments/assets/b270fa03-cb30-48b0-98a6-2b0ba5f8788e)
 
-#Movemente And Attack Widget - Hard Mode
+# Movemente And Attack Widget - Hard Mode
 ![image](https://github.com/user-attachments/assets/2343d584-a7cd-4e74-a60d-a040c8a230cc)
 
-#Movemente Range - Hard Mode
+# Movemente Range - Hard Mode
 ![image](https://github.com/user-attachments/assets/6e69fea2-7276-4def-9c92-821332c4406a)
 
-#Game Over - Hard Mode
+# Game Over - Hard Mode
 ![image](https://github.com/user-attachments/assets/86b6362f-fc9d-41a6-a226-30a0647ce9cb)
 
-#CoinFlip - Easy Mode
+# CoinFlip - Easy Mode
 ![image](https://github.com/user-attachments/assets/5ef0fba1-8f52-45f2-a389-548a061f8a4a)
