@@ -46,16 +46,16 @@ This is a turn-based strategic game developed as a final project for the PAA cou
 - Game ends when one player loses all units
 
 ## Project Requirements Implemented
-✅ Compiles correctly with well-commented and structured C++ code
-✅ Correct initial grid visualization
-✅ Game unit placement mechanism
-✅ AI with random actions (movement and attack)
-✅ Turn-based gameplay with win conditions
-✅ Game state interface (current turn, unit health)
-✅ Movement range suggestions
-✅ Counterattack damage mechanism
-✅ Move history logging
-✅ AI with optimized movement algorithms (A*)
+- ✅ Compiles correctly with well-commented and structured C++ code
+- ✅ Correct initial grid visualization
+- ✅ Game unit placement mechanism
+- ✅ AI with random actions (movement and attack)
+- ✅ Turn-based gameplay with win conditions
+- ✅ Game state interface (current turn, unit health)
+- ✅ Movement range suggestions
+- ✅ Counterattack damage mechanism
+- ✅ Move history logging
+- ✅ AI with optimized movement algorithms (A*)
 
 ## Technical Details
 - **Engine**: Unreal Engine 5.4
