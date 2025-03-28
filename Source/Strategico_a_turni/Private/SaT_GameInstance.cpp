@@ -1,14 +1,11 @@
 // Fill out your copyright notice in the Description page of Project Settings.
 
-
-// Fill out your copyright notice in the Description page of Project Settings.
-
-
 #include "SaT_GameInstance.h"
 #include "SaT_GameMode.h"
 #include "GridManager.h"
 #include "Kismet/GameplayStatics.h"
 
+// Constructor
 USaT_GameInstance::USaT_GameInstance()
 {
     // Default initialization
@@ -22,6 +19,8 @@ USaT_GameInstance::USaT_GameInstance()
     AIDifficulty = EAIDifficulty::HARD;
 }
 
+
+// Sets the AI difficulty level and logs the change
 void USaT_GameInstance::SetAIDifficulty(EAIDifficulty NewDifficulty)
 {
     AIDifficulty = NewDifficulty;
@@ -29,6 +28,7 @@ void USaT_GameInstance::SetAIDifficulty(EAIDifficulty NewDifficulty)
         AIDifficulty == EAIDifficulty::EASY ? TEXT("EASY") : TEXT("HARD"));
 }
 
+//  Sets up the game with the selected difficulty and regenerates the grid
 void USaT_GameInstance::SetupGameWithDifficulty(EAIDifficulty Difficulty)
 {
     // Store the difficulty setting
@@ -50,7 +50,6 @@ void USaT_GameInstance::SetupGameWithDifficulty(EAIDifficulty Difficulty)
         {
             GridManager = Cast<AGridManager>(FoundGrids[0]);
 
-            // IMPORTANT: Save reference to path material before regenerating
             UMaterialInterface* SavedPathMaterial = nullptr;
             if (GridManager)
             {
@@ -75,11 +74,9 @@ void USaT_GameInstance::SetupGameWithDifficulty(EAIDifficulty Difficulty)
                 GridManager->PathTiles.Empty();
                 GridManager->GenerateField();
 
-                // IMPORTANT: Restore path material after regenerating
                 if (SavedPathMaterial)
                 {
                     GridManager->PathMaterial = SavedPathMaterial;
-                    UE_LOG(LogTemp, Warning, TEXT("Path material preserved during grid regeneration"));
                 }
             }
         }
@@ -87,58 +84,34 @@ void USaT_GameInstance::SetupGameWithDifficulty(EAIDifficulty Difficulty)
         // Start the game
         GameMode->StartGame();
     }
-
-    UE_LOG(LogTemp, Warning, TEXT("Setting up game with difficulty: %s - Obstacle percentage: %f%%"),
-        Difficulty == EAIDifficulty::EASY ? TEXT("EASY") : TEXT("HARD"),
-        (Difficulty == EAIDifficulty::EASY ? 0.1f : 0.2f) * 100.0f);
 }
 
+/*
+ * Randomly determines which player starts the game
+ * Uses a 50/50 chance to set bPlayerStartsFirst and bIsPlayerTurn
+ */
 void USaT_GameInstance::TossCoin()
 {
-    // Debug log to confirm function is called
-    UE_LOG(LogTemp, Warning, TEXT("===== GAMEINSTANCE: TOSS COIN CALLED ====="));
-
-    // Log the initial state
-    UE_LOG(LogTemp, Warning, TEXT("Before toss: bPlayerStartsFirst = %s"),
-        bPlayerStartsFirst ? TEXT("TRUE (Human)") : TEXT("FALSE (AI)"));
-
     // 50/50 chance to determine who starts first
     bPlayerStartsFirst = FMath::RandBool();
     bIsPlayerTurn = bPlayerStartsFirst;
 
-    // Log the random value generated
-    float RandomValue = FMath::FRand(); // Just for debugging to show the random value
-    UE_LOG(LogTemp, Warning, TEXT("Random value generated (for reference): %f"), RandomValue);
-
-    // Log the final result with more attention-grabbing format
-    UE_LOG(LogTemp, Warning, TEXT("****** COIN TOSS RESULT: %s GOES FIRST ******"),
-        bPlayerStartsFirst ? TEXT("HUMAN PLAYER") : TEXT("AI PLAYER"));
-
-    // Log the final state
-    UE_LOG(LogTemp, Warning, TEXT("After toss: bPlayerStartsFirst = %s, bIsPlayerTurn = %s"),
-        bPlayerStartsFirst ? TEXT("TRUE (Human)") : TEXT("FALSE (AI)"),
-        bIsPlayerTurn ? TEXT("TRUE (Human)") : TEXT("FALSE (AI)"));
 }
 
+/*
+ * Switches the turn between players and handles phase transitions
+ * Updates the turn counter and checks if the setup phase is complete
+ */
 void USaT_GameInstance::SwitchTurn()
 {
-    // Log the current state before switching
-    UE_LOG(LogTemp, Warning, TEXT("===== SWITCHING TURNS ====="));
-
     // Always toggle the turn flag
     bIsPlayerTurn = !bIsPlayerTurn;
 
-    // If we've completed a full turn cycle (both players have moved)
     if (bIsPlayerTurn) 
     {
         // Increment turn counter
         CurrentTurnNumber++;
     }
-
-    UE_LOG(LogTemp, Warning, TEXT("BEFORE SWITCH - Current turn: %s, Phase: %s"),
-        bIsPlayerTurn ? TEXT("Human Player") : TEXT("AI Player"),
-        CurrentPhase == EGamePhase::SETUP ? TEXT("SETUP") :
-        CurrentPhase == EGamePhase::PLAYING ? TEXT("PLAYING") : TEXT("GAMEOVER"));
 
     // Then handle phase transition if needed
     if (CurrentPhase == EGamePhase::SETUP && IsSetupComplete())
@@ -148,38 +121,37 @@ void USaT_GameInstance::SwitchTurn()
         UE_LOG(LogTemp, Warning, TEXT("Setup phase complete! Transitioning to PLAYING phase."));
 
     }
-
-    // Log the state after switching
-    UE_LOG(LogTemp, Warning, TEXT("AFTER SWITCH - Current turn: %s, Phase: %s"),
-        bIsPlayerTurn ? TEXT("Human Player") : TEXT("AI Player"),
-        CurrentPhase == EGamePhase::SETUP ? TEXT("SETUP") :
-        CurrentPhase == EGamePhase::PLAYING ? TEXT("PLAYING") : TEXT("GAMEOVER"));
 }
 
+/*
+ * Checks if the setup phase is complete by verifying both players have placed their units
+ * @return True if both players have placed the required number of units
+ */
 bool USaT_GameInstance::IsSetupComplete() const
 {
     // Both players need to place 2 units each
     constexpr int32 UnitsPerPlayer = 2;
     bool result = (HumanUnitsPlaced >= UnitsPerPlayer && AIUnitsPlaced >= UnitsPerPlayer);
 
-    UE_LOG(LogTemp, Warning, TEXT("IsSetupComplete check: Human units=%d, AI units=%d, Result=%s"),
-        HumanUnitsPlaced, AIUnitsPlaced, result ? TEXT("TRUE") : TEXT("FALSE"));
-
     return result;
 }
 
+/*
+ * Checks if the game is over
+ * @return True if the current phase is GAMEOVER
+ */
 bool USaT_GameInstance::CheckGameOver()
 {
     return (CurrentPhase == EGamePhase::GAMEOVER);
 }
 
+// Sets the current game phase and logs the change
 void USaT_GameInstance::SetGamePhase(EGamePhase NewPhase)
 {
     if (CurrentPhase != NewPhase)
     {
         CurrentPhase = NewPhase;
 
-        // Log phase change for debugging
         FString PhaseStr;
         switch (CurrentPhase)
         {
@@ -202,6 +174,10 @@ void USaT_GameInstance::SetGamePhase(EGamePhase NewPhase)
 
 }
 
+/*
+ * Gets the current game phase
+ * @return The current game phase enum value
+ */
 EGamePhase USaT_GameInstance::GetGamePhase() const
 {
     return CurrentPhase;

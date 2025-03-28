@@ -9,7 +9,10 @@
 #include "Brawler.h"
 #include "Engine/World.h"
 
-// Sets default values
+/*
+ * Constructor - sets default values for unit properties
+ * Creates components and initializes stats
+ */
 AUnit::AUnit()
 {
     // Set this pawn to call Tick() every frame
@@ -32,7 +35,6 @@ AUnit::AUnit()
     GridY = 1;
     UnitGridPosition = FVector2D(0.0f, 0.0f);
 
-    // Default team (will be set properly when spawned)
     bIsPlayerUnit = true;
     bIsSelected = false;
     bHasMovedThisTurn = false;
@@ -56,25 +58,23 @@ AUnit::AUnit()
     {
         UE_LOG(LogTemp, Error, TEXT("Failed to load Red AI material!"));
     }
-
-    // Make sure to log success or failure for debugging
-    UE_LOG(LogTemp, Display, TEXT("Unit constructor: Blue material %s, Red material %s"),
-        BlueMaterial ? TEXT("loaded") : TEXT("failed"),
-        RedMaterial ? TEXT("loaded") : TEXT("failed"));
 }
 
-// Called when the game starts or when spawned
+/*
+ * Called when the game starts or when spawned
+ * Initializes the unit and ensures proper team color
+ */
 void AUnit::BeginPlay()
 {
     Super::BeginPlay();
 
-    // Verify team setting
-    UE_LOG(LogTemp, Display, TEXT("Unit %s BeginPlay: Team is %s"),
-        *GetName(), bIsPlayerUnit ? TEXT("Player") : TEXT("AI"));
-
     UpdateTeamColor();
 }
 
+/*
+ * Updates the unit's material based on its team
+ * Blue for player units, red for AI units
+ */
 void AUnit::UpdateTeamColor()
 {
     if (!StaticMeshComponent)
@@ -89,12 +89,10 @@ void AUnit::UpdateTeamColor()
     if (bIsPlayerUnit)
     {
         TeamMaterial = BlueMaterial;
-        UE_LOG(LogTemp, Display, TEXT("Unit %s: Using BLUE material for PLAYER unit"), *GetName());
     }
     else
     {
         TeamMaterial = RedMaterial;
-        UE_LOG(LogTemp, Display, TEXT("Unit %s: Using RED material for AI unit"), *GetName());
     }
 
     // Apply the team material if it exists
@@ -118,12 +116,13 @@ void AUnit::UpdateTeamColor()
     }
 }
 
+/*
+ * Sets whether the unit belongs to the player or AI
+ * Updates visual appearance accordingly
+ * @param bIsPlayer - True if unit belongs to player, false if AI
+ */
 void AUnit::SetPlayerUnit(bool bIsPlayer)
 {
-    // Add more detailed logging
-    UE_LOG(LogTemp, Error, TEXT("SetPlayerUnit CALLED: Unit %s - Setting team to %s"),
-        *GetName(), bIsPlayer ? TEXT("PLAYER (BLUE)") : TEXT("AI (RED)"));
-
     // Set the team flag
     bIsPlayerUnit = bIsPlayer;
 
@@ -131,12 +130,15 @@ void AUnit::SetPlayerUnit(bool bIsPlayer)
     UpdateTeamColor();
 }
 
+/*
+ * Applies selected visual state to the unit
+ * Changes material to indicate selection
+ */
 void AUnit::ShowSelected()
 {
     // Change the material to show the unit is selected
     if (SelectedMaterial)
     {
-        UE_LOG(LogTemp, Warning, TEXT("Unit %s: Applying selected material"), *GetName());
         StaticMeshComponent->SetMaterial(0, SelectedMaterial);
         bIsSelected = true;
     }
@@ -146,11 +148,12 @@ void AUnit::ShowSelected()
     }
 }
 
+/*
+ * Removes selected visual state from the unit
+ * Restores original team color
+ */
 void AUnit::UnshowSelected()
 {
-    UE_LOG(LogTemp, Error, TEXT("UnshowSelected: Unit %s, Team = %s"),
-        *GetName(), bIsPlayerUnit ? TEXT("PLAYER (BLUE)") : TEXT("AI (RED)"));
-
     // Explicitly choose the correct material based on team
     UMaterialInterface* TeamMaterial = bIsPlayerUnit ? BlueMaterial : RedMaterial;
 
@@ -170,23 +173,19 @@ void AUnit::UnshowSelected()
     bIsSelected = false;
 }
 
+/*
+ * Applies damage to the unit and handles death if HP reaches zero
+ * @param Damage - Amount of damage to apply
+ */
 void AUnit::DamageTaken(int32 Damage)
 {
-    UE_LOG(LogTemp, Warning, TEXT("%s taking %d damage. Current HP: %d"),
-        *GetName(), Damage, Hp);
-
     // Reduce the HP by the damage amount
     int32 PreviousHP = Hp;
     Hp = FMath::Max(0, Hp - Damage);
 
-    UE_LOG(LogTemp, Warning, TEXT("%s HP reduced from %d to %d"),
-        *GetName(), PreviousHP, Hp);
-
     // Check if unit is dead
     if (!IsAlive())
     {
-        UE_LOG(LogTemp, Warning, TEXT("%s has been killed!"), *GetName());
-
         // Free the grid cell this unit was occupying
         AGridManager* GridManager = nullptr;
         TArray<AActor*> FoundGrids;
@@ -198,7 +197,6 @@ void AUnit::DamageTaken(int32 Damage)
             {
                 // Free the cell
                 GridManager->OccupyCell(GridX, GridY, nullptr);
-                UE_LOG(LogTemp, Warning, TEXT("Freed grid cell at (%d,%d) after unit death"), GridX, GridY);
             }
         }
 
@@ -213,16 +211,26 @@ void AUnit::DamageTaken(int32 Damage)
             GameMode->NotifyUnitDeath(this);
         }
 
-        // Destroy the actor with a delay (e.g., 2 seconds)
+        // Destroy the actor with a delay
         SetLifeSpan(2.0f);
     }
 }
 
+/*
+ * Checks if the unit is still alive
+ * @return True if unit has HP remaining, false if dead
+ */
 bool AUnit::IsAlive() const
 {
     return Hp > 0;
 }
 
+/*
+ * Moves the unit to a new grid position within movement range
+ * @param NewGridX - Target X coordinate
+ * @param NewGridY - Target Y coordinate
+ * @return True if move was successful, false otherwise
+ */
 bool AUnit::Move(int32 NewGridX, int32 NewGridY)
 {
     // Check if the unit has already moved this turn
@@ -243,8 +251,6 @@ bool AUnit::Move(int32 NewGridX, int32 NewGridY)
         GridY = NewGridY;
         UnitGridPosition = FVector2D(NewGridX, NewGridY);
 
-        // Update the actor's physical position in the world
-        // This assumes your grid has a cell size of 100 units
         float CellSize = 100.0f;
         FVector NewLocation = FVector(NewGridX * CellSize, NewGridY * CellSize, GetActorLocation().Z);
         SetActorLocation(NewLocation);
@@ -258,6 +264,11 @@ bool AUnit::Move(int32 NewGridX, int32 NewGridY)
     return false;
 }
 
+/*
+ * Performs an attack against another unit with possible counterattack
+ * @param Target - Unit to attack
+ * @return True if attack was successful, false otherwise
+ */
 bool AUnit::Attack(AUnit* Target)
 {
     // Make sure target is valid and alive
@@ -285,22 +296,17 @@ bool AUnit::Attack(AUnit* Target)
     bool bShouldCounterattack = false;
     int32 CounterDamage = 0;
 
-    // IMPORTANT: Calculate counterattack damage BEFORE applying any damage
-    // This ensures both units can "die together" if appropriate
     if (Target->IsAlive())
     {
-        // Check for counterattack conditions:
-        // 1. If the target is a Sniper
-        // 2. If the target is a Brawler and is adjacent (distance of 1)
+        // Check for counterattack conditions
         ASniper* TargetSniper = Cast<ASniper>(Target);
         ABrawler* TargetBrawler = Cast<ABrawler>(Target);
 
-        // Condition 1: Target is a Sniper
         if (TargetSniper)
         {
             bShouldCounterattack = true;
         }
-        // Condition 2: Target is a Brawler and is adjacent
+
         else if (TargetBrawler)
         {
             // Calculate Manhattan distance (grid-based)
@@ -311,28 +317,17 @@ bool AUnit::Attack(AUnit* Target)
                 bShouldCounterattack = true;
             }
         }
-
-        // Calculate counterattack damage if conditions are met
         if (bShouldCounterattack)
         {
-            // Calculate counterattack damage (random 1-3 as specified)
+            // Calculate counterattack damage (random 1-3)
             CounterDamage = FMath::RandRange(1, 3);
         }
     }
 
-    // IMPORTANT: Apply BOTH damages AFTER calculation
-    // This allows both units to "die together" in case of mutual destruction
-
-    // First apply main attack damage to target
-    UE_LOG(LogTemp, Warning, TEXT("%s attacking %s for %d damage"),
-        *GetName(), *Target->GetName(), Damage);
     Target->DamageTaken(Damage);
 
-    // Then apply counterattack damage to attacker (if applicable)
     if (bShouldCounterattack && CounterDamage > 0)
     {
-        UE_LOG(LogTemp, Warning, TEXT("%s counterattacking %s for %d damage"),
-            *Target->GetName(), *GetName(), CounterDamage);
         DamageTaken(CounterDamage);
     }
 
@@ -380,14 +375,8 @@ bool AUnit::Attack(AUnit* Target)
             }
         }
 
-        UE_LOG(LogTemp, Warning, TEXT("Checking after mutual kill: Human units alive: %d, AI units alive: %d"),
-            HumanUnitsAlive, AIUnitsAlive);
-
-        // ONLY trigger a draw if BOTH sides have NO units remaining
         if (HumanUnitsAlive == 0 && AIUnitsAlive == 0)
         {
-            UE_LOG(LogTemp, Warning, TEXT("TRUE MUTUAL DESTRUCTION: All units eliminated - DRAW"));
-
             AGameModeBase* GameModeBase = UGameplayStatics::GetGameMode(GetWorld());
             ASaT_GameMode* GameMode = Cast<ASaT_GameMode>(GameModeBase);
             if (GameMode)
@@ -409,12 +398,22 @@ bool AUnit::Attack(AUnit* Target)
     return true;
 }
 
+/*
+ * Calculates random damage value between min and max damage
+ * @return Damage amount
+ */
 int32 AUnit::CalculateDamage() const
 {
     // Generate a random damage value between MinDamage and MaxDamage
     return FMath::RandRange(MinDamage, MaxDamage);
 }
 
+/*
+ * Checks if a target unit is within attack range
+ * Uses Manhattan distance on grid
+ * @param Target - Unit to check range to
+ * @return True if target is in range, false otherwise
+ */
 bool AUnit::IsTargetInRange(const AUnit* Target) const
 {
     if (!Target)
@@ -426,13 +425,17 @@ bool AUnit::IsTargetInRange(const AUnit* Target) const
     // Calculate Manhattan distance (grid-based)
     int32 Distance = FMath::Abs(Target->GridX - GridX) + FMath::Abs(Target->GridY - GridY);
 
-    UE_LOG(LogTemp, Warning, TEXT("%s checking range to %s. Distance: %d, Attack Range: %d"),
-        *GetName(), *Target->GetName(), Distance, RangeAttack);
-
     // Check if the target is within range
     return Distance <= RangeAttack;
 }
 
+/*
+ * Static method to check if two units would destroy each other
+ * Used for detecting potential draw scenarios
+ * @param Attacker - First unit in potential mutual destruction
+ * @param Target - Second unit in potential mutual destruction
+ * @return True if mutual destruction would occur, false otherwise
+ */
 bool AUnit::CheckMutualDestruction(AUnit* Attacker, AUnit* Target)
 {
     // Validate inputs
@@ -450,7 +453,7 @@ bool AUnit::CheckMutualDestruction(AUnit* Attacker, AUnit* Target)
     int32 PlayerUnitsAlive = 0;
     int32 AIUnitsAlive = 0;
 
-    // Count all living units (excluding the two units we're checking)
+    // Count all living units
     for (AActor* UnitActor : AllUnits)
     {
         AUnit* Unit = Cast<AUnit>(UnitActor);
@@ -463,53 +466,38 @@ bool AUnit::CheckMutualDestruction(AUnit* Attacker, AUnit* Target)
         }
     }
 
-    // If there are other units alive on either side, this is not a mutual destruction scenario
     if (PlayerUnitsAlive > 0 || AIUnitsAlive > 0)
     {
-        UE_LOG(LogTemp, Warning, TEXT("Not a mutual destruction scenario - other units exist"));
         return false;
     }
 
-    // Special draw condition: only valid for two snipers
     ASniper* AttackerSniper = Cast<ASniper>(Attacker);
     ASniper* TargetSniper = Cast<ASniper>(Target);
     if (!AttackerSniper || !TargetSniper)
     {
-        // If either unit is not a sniper, no draw
-        UE_LOG(LogTemp, Warning, TEXT("Not a mutual destruction scenario - units aren't both snipers"));
         return false;
     }
 
-    // Both units must be the last of their respective teams and have 1 HP
     bool AttackerIsHuman = Attacker->bIsPlayerUnit;
     bool TargetIsHuman = Target->bIsPlayerUnit;
 
-    // They must be on opposite teams
     if (AttackerIsHuman == TargetIsHuman)
     {
-        UE_LOG(LogTemp, Warning, TEXT("Not a mutual destruction scenario - units on same team"));
         return false;
     }
 
-    // Both must have 1 HP to trigger mutual destruction
+
     if (Attacker->Hp != 1 || Target->Hp != 1)
     {
-        UE_LOG(LogTemp, Warning, TEXT("Not a mutual destruction scenario - units don't both have 1 HP"));
         return false;
     }
 
-    // Both must be in range of each other for mutual destruction
     bool AttackerCanHitTarget = Attacker->IsTargetInRange(Target);
     bool TargetCanHitAttacker = Target->IsTargetInRange(Attacker);
 
     if (!AttackerCanHitTarget || !TargetCanHitAttacker)
     {
-        UE_LOG(LogTemp, Warning, TEXT("Not a mutual destruction scenario - units not in range of each other"));
         return false;
     }
-
-    UE_LOG(LogTemp, Warning, TEXT("MUTUAL DESTRUCTION CHECK: %s and %s would kill each other"),
-        *Attacker->GetName(), *Target->GetName());
-
     return true;
 }

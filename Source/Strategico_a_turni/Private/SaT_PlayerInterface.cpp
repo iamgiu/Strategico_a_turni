@@ -7,7 +7,6 @@ void ISaT_PlayerInterface::OnDraw()
 {
     if (GameInstance)
     {
-        // Optional: Set a draw message in GameInstance if needed
         UE_LOG(LogTemp, Warning, TEXT("Player notified of game draw"));
     }
 }

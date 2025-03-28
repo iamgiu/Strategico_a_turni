@@ -4,6 +4,10 @@
 #include "GridManager.h"
 #include "Unit.h"
 
+//----------------------------------------------
+// Constructor and Lifecycle Methods
+//----------------------------------------------
+
 // Sets default values
 AGridManager::AGridManager()
 {
@@ -11,15 +15,12 @@ AGridManager::AGridManager()
 	// Set this actor to call Tick() every frame.  You can turn this off to improve performance if you don't need it.
 	PrimaryActorTick.bCanEverTick = false;
 
-	// size of the field (25x25)
-	Size = 25;
+	// Default grid properties
+	Size = 25; 	// size of the field (25x25)
+	TileSize = 100.0f; 	// tile dimension
+	CellPadding = 0.01f; // tile padding percentage 
 
-	// tile dimension
-	TileSize = 100.0f;
-
-	// tile padding percentage 
-	CellPadding = 0.01f;
-
+	// Load materials
 	static ConstructorHelpers::FObjectFinder<UMaterial> DefaultMatAsset(TEXT("/Game/Materials/M_BaseMaterial"));
 	if (DefaultMatAsset.Succeeded())
 	{
@@ -48,7 +49,7 @@ AGridManager::AGridManager()
 void AGridManager::OnConstruction(const FTransform& Transform)
 {
 	Super::OnConstruction(Transform);
-	//normalized tilepadding
+	// Calculate the normalized tile positioning multiplier
 	NextCellPositionMultiplier = FMath::RoundToDouble(((TileSize + TileSize * CellPadding) / TileSize) * 100) / 100;
 }
 
@@ -78,10 +79,13 @@ void AGridManager::BeginPlay()
 	GenerateField();
 }
 
+//----------------------------------------------
+// Grid Generation and Setup
+//----------------------------------------------
+
 void AGridManager::GenerateField()
 {
 
-	UE_LOG(LogTemp, Warning, TEXT("Generating field with %f%% obstacles"), ObstaclePercentage * 100.0f);
 	// Clear all existing tiles first
 	for (ATile* Tile : TileArray)
 	{
@@ -119,6 +123,10 @@ void AGridManager::GenerateField()
 	// After generating the basic grid, add obstacles
 	GenerateObstacles();
 }
+
+//----------------------------------------------
+// Grid Interaction and Query Methods
+//----------------------------------------------
 
 FVector2D AGridManager::GetPosition(const FHitResult& Hit)
 {
@@ -207,12 +215,9 @@ bool AGridManager::AllEqual(const TArray<int32>& Array) const
 	return true;
 }
 
-// Verifica se una cella è occupata
+// Check if a cell is occupied
 bool AGridManager::IsCellOccupied(int32 GridX, int32 GridY)
 {
-	// Log this check for debugging
-	UE_LOG(LogTemp, Display, TEXT("Checking cell occupation at (%d,%d)"), GridX, GridY);
-
 	// Verify if coordinates are valid
 	if (!IsValidPosition(FVector2D(GridX, GridY)))
 	{
@@ -239,20 +244,20 @@ bool AGridManager::IsCellOccupied(int32 GridX, int32 GridY)
 	bool bOccupied = Tile->bIsOccupied;
 	bool bObstacle = Tile->bIsObstacle;
 
-	// Debug log the state
-	if (bOccupied || bObstacle)
-	{
-		UE_LOG(LogTemp, Display, TEXT("Cell (%d,%d) is occupied=%s, obstacle=%s"),
-			GridX, GridY,
-			bOccupied ? TEXT("YES") : TEXT("NO"),
-			bObstacle ? TEXT("YES") : TEXT("NO"));
-	}
+	//// Debug log the state
+	//if (bOccupied || bObstacle)
+	//{
+	//	UE_LOG(LogTemp, Display, TEXT("Cell (%d,%d) is occupied=%s, obstacle=%s"),
+	//		GridX, GridY,
+	//		bOccupied ? TEXT("YES") : TEXT("NO"),
+	//		bObstacle ? TEXT("YES") : TEXT("NO"));
+	//}
 
 	// Return true if either occupied by a unit OR is an obstacle
 	return bOccupied || bObstacle;
 }
 
-// Occupa una cella con un'unità
+// Occupies a cell with one unit
 void AGridManager::OccupyCell(int32 GridX, int32 GridY, AUnit* Unit)
 {
 	// Verify if the coordinates are valid
@@ -276,9 +281,6 @@ void AGridManager::OccupyCell(int32 GridX, int32 GridY, AUnit* Unit)
 
 				// Clear the reference to the occupying unit
 				Tile->OccupyingUnit = nullptr;
-
-				// Log the cell being freed
-				UE_LOG(LogTemp, Warning, TEXT("Cell at (%d,%d) has been freed"), GridX, GridY);
 			}
 			else
 			{
@@ -296,8 +298,6 @@ void AGridManager::OccupyCell(int32 GridX, int32 GridY, AUnit* Unit)
 				FVector WorldLocation = GetWorldLocationFromGrid(GridX, GridY);
 				Unit->SetActorLocation(WorldLocation);
 
-				UE_LOG(LogTemp, Warning, TEXT("Unit %s now occupies cell (%d,%d)"),
-					*Unit->GetName(), GridX, GridY);
 			}
 		}
 	}
@@ -312,8 +312,6 @@ FVector AGridManager::GetWorldLocationFromGrid(int32 GridX, int32 GridY)
 		return FVector(0, 0, 50.0f);
 	}
 
-	// Adjust for the 2-unit offset (observed from your logs)
-	// The visual coordinates are offset by +2 in both X and Y
 	int32 AdjustedX = GridX;
 	int32 AdjustedY = GridY;
 
@@ -323,11 +321,12 @@ FVector AGridManager::GetWorldLocationFromGrid(int32 GridX, int32 GridY)
 	// Add Z offset to make the unit visible above the tile
 	WorldLocation.Z += 50.0f;
 
-	UE_LOG(LogTemp, Warning, TEXT("World position calculated: X=%f, Y=%f, Z=%f (original coords: %d,%d, adjusted: %d,%d)"),
-		WorldLocation.X, WorldLocation.Y, WorldLocation.Z, GridX, GridY, AdjustedX, AdjustedY);
-
 	return WorldLocation;
 }
+
+//----------------------------------------------
+// Visualization and Highlighting Methods
+//----------------------------------------------
 
 void AGridManager::HighlightCell(int32 GridX, int32 GridY, bool bHighlight)
 {
@@ -349,7 +348,7 @@ void AGridManager::HighlightCell(int32 GridX, int32 GridY, bool bHighlight)
 		// Apply highlighting material to the tile
 		if (bHighlight)
 		{
-			// Set highlight material - you'll need to create this material in your project
+			// Set highlight material
 			if (HighlightMaterial)
 			{
 				Tile->StaticMeshComponent->SetMaterial(0, HighlightMaterial);
@@ -367,7 +366,6 @@ void AGridManager::HighlightCell(int32 GridX, int32 GridY, bool bHighlight)
 
 bool AGridManager::HighlightPath(TArray<FVector2D> PathPoints, bool bClearPrevious)
 {
-	UE_LOG(LogTemp, Warning, TEXT("HighlightPath called with %d points"), PathPoints.Num());
 
 	// Verify path material exists
 	if (!PathMaterial)
@@ -389,14 +387,12 @@ bool AGridManager::HighlightPath(TArray<FVector2D> PathPoints, bool bClearPrevio
 		ClearPathHighlights();
 	}
 
-	// If we don't have at least 2 points, can't draw a path
 	if (PathPoints.Num() < 2)
 	{
 		UE_LOG(LogTemp, Warning, TEXT("Not enough points to draw a path"));
 		return false;
 	}
 
-	// Generate an obstacle-aware orthogonal path
 	TArray<FVector2D> FullPath;
 
 	for (int32 i = 0; i < PathPoints.Num() - 1; i++)
@@ -508,7 +504,6 @@ bool AGridManager::HighlightPath(TArray<FVector2D> PathPoints, bool bClearPrevio
 			PathTiles.Add(Tile);
 			highlightedCount++;
 
-			UE_LOG(LogTemp, Warning, TEXT("Highlighted path tile at (%d, %d)"), GridX, GridY);
 		}
 		else
 		{
@@ -516,11 +511,10 @@ bool AGridManager::HighlightPath(TArray<FVector2D> PathPoints, bool bClearPrevio
 		}
 	}
 
-	UE_LOG(LogTemp, Warning, TEXT("Path highlighting complete. Highlighted %d tiles"), highlightedCount);
 	return highlightedCount > 0;
 }
 
-// Add this debug method to help troubleshoot path materials
+// Function to control materials
 void AGridManager::DebugMaterials()
 {
     UE_LOG(LogTemp, Warning, TEXT("===== DEBUGGING MATERIALS ====="));
@@ -548,8 +542,6 @@ void AGridManager::ClearAllHighlights()
 
 void AGridManager::ClearPathHighlights()
 {
-	UE_LOG(LogTemp, Warning, TEXT("Clearing path highlights. Total tiles: %d"), PathTiles.Num());
-
 	// Reset all path-highlighted tiles to their original material
 	for (ATile* Tile : PathTiles)
 	{
@@ -572,9 +564,6 @@ void AGridManager::GenerateObstacles()
 	// Calculate how many obstacles to generate based on percentage
 	int32 TotalCells = Size * Size;
 	int32 NumObstacles = FMath::RoundToInt(TotalCells * ObstaclePercentage);
-
-	UE_LOG(LogTemp, Warning, TEXT("Generating %d obstacles (%.1f%% of grid)"),
-		NumObstacles, ObstaclePercentage * 100.0f);
 
 	// Keep track of which cells we've already processed
 	TArray<bool> ProcessedCells;
@@ -603,7 +592,6 @@ void AGridManager::GenerateObstacles()
 		// Set as obstacle
 		Tile->bIsObstacle = true;
 
-		// ENSURE MATERIAL IS APPLIED - This is critical!
 		if (ObstacleMaterial)
 		{
 			Tile->StaticMeshComponent->SetMaterial(0, ObstacleMaterial);
@@ -688,9 +676,14 @@ void AGridManager::DebugObstacles()
 	UE_LOG(LogTemp, Warning, TEXT("===================================="));
 }
 
+/*
+ * Removes a single obstacle to create a path to an otherwise unreachable cell.
+ * This method finds the nearest accessible cell to the unreachable position,
+ * then removes one obstacle along either a horizontal or vertical path to connect them.
+ * The obstacle removal process maintains grid challenge while ensuring connectivity.
+*/
 bool AGridManager::RemoveObstacleToCreatePath(int32 UnreachableX, int32 UnreachableY)
 {
-	// Find the nearest reachable non-obstacle cell (we know it exists from our BFS)
 	int32 BestX = -1, BestY = -1;
 	float BestDistance = FLT_MAX;
 
@@ -713,9 +706,8 @@ bool AGridManager::RemoveObstacleToCreatePath(int32 UnreachableX, int32 Unreacha
 	}
 
 	if (BestX == -1 || BestY == -1)
-		return false;  // No reachable cells found (shouldn't happen)
+		return false; 
 
-	// Create a simple path by removing obstacles in a straight line
 	int32 DiffX = UnreachableX - BestX;
 	int32 DiffY = UnreachableY - BestY;
 
@@ -723,7 +715,6 @@ bool AGridManager::RemoveObstacleToCreatePath(int32 UnreachableX, int32 Unreacha
 	int32 StepX = (DiffX > 0) ? 1 : -1;
 	if (DiffX != 0) StepX = (DiffX > 0) ? 1 : -1;
 
-	// Remove obstacles horizontally
 	for (int32 X = BestX; X != UnreachableX; X += StepX)
 	{
 		ATile* Tile = TileMap[FVector2D(X, BestY)];
@@ -735,11 +726,10 @@ bool AGridManager::RemoveObstacleToCreatePath(int32 UnreachableX, int32 Unreacha
 			{
 				Tile->StaticMeshComponent->SetMaterial(0, DefaultTileMaterial);
 			}
-			return true;  // We only need to remove one obstacle to fix connectivity
+			return true; 
 		}
 	}
 
-	// Remove obstacles vertically
 	int32 StepY = (DiffY > 0) ? 1 : -1;
 	for (int32 Y = BestY; Y != UnreachableY; Y += StepY)
 	{
@@ -752,12 +742,16 @@ bool AGridManager::RemoveObstacleToCreatePath(int32 UnreachableX, int32 Unreacha
 			{
 				Tile->StaticMeshComponent->SetMaterial(0, DefaultTileMaterial);
 			}
-			return true;  // We only need to remove one obstacle to fix connectivity
+			return true; 
 		}
 	}
 
-	return false;  // No obstacles needed to be removed
+	return false; 
 }
+
+//----------------------------------------------
+// Grid Connectivity Methods
+//----------------------------------------------
 
 bool AGridManager::EnsureGridConnectivity()
 {
@@ -785,7 +779,7 @@ bool AGridManager::EnsureGridConnectivity()
 		return true;
 	}
 
-	// Find the largest region (presumably the main playable area)
+	// Find the largest region
 	int32 LargestRegionId = FindLargestRegion(RegionMap, RegionCount);
 
 	// Connect smaller regions to the largest region
@@ -813,12 +807,9 @@ bool AGridManager::EnsureGridConnectivity()
 				}
 			}
 		}
-
-		UE_LOG(LogTemp, Warning, TEXT("Grid connectivity improved by connecting regions"));
 		return true;
 	}
 
-	UE_LOG(LogTemp, Error, TEXT("Could not ensure grid connectivity"));
 	return false;
 }
 

@@ -5,7 +5,7 @@
 #include "CoreMinimal.h"
 
 
-// Enum per le tipologie di unità
+// Enum for types of units
 UENUM()
 enum class EPieceUnit : uint8
 {
@@ -14,6 +14,7 @@ enum class EPieceUnit : uint8
 	BRAWLER,
 };
 
+// Enum for the players
 UENUM(BlueprintType)
 enum class EPlayerType : uint8
 {
@@ -21,6 +22,7 @@ enum class EPlayerType : uint8
 	AI UMETA(DisplayName = "AI"),       //1
 };
 
+// Enum to assign colors to various players
 UENUM()
 enum class EPieceColor : int8
 {
@@ -30,7 +32,7 @@ enum class EPieceColor : int8
 	BOTH = 2	// Both color to take into account both pieces of both the colors
 };
 
-// Enum per le fasi di gioco
+// Enum for the game phases
 UENUM(BlueprintType)
 enum class EGamePhase : uint8
 {
@@ -39,7 +41,7 @@ enum class EGamePhase : uint8
 	GAMEOVER UMETA(DisplayName = "GameOver")
 };
 
-// ENum per verificare se una unitò è viva oppure morta
+// Enum to check whether a unit is alive or dead
 UENUM()
 enum class EUnitStatus : int8
 {
@@ -47,6 +49,7 @@ enum class EUnitStatus : int8
 	DEAD
 };
 
+// Enum to check whether a cell is empty or not
 UENUM(BlueprintType)
 enum class ETileStatus : uint8
 {
@@ -54,6 +57,7 @@ enum class ETileStatus : uint8
 	OCCUPIED UMETA(DisplayName = "Occupied"),
 };
 
+// Enum to identify the difficulty of the game
 UENUM(BlueprintType)
 enum class EAIDifficulty : uint8
 {

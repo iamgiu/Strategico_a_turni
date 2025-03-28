@@ -3,6 +3,10 @@
 
 #include "Sniper.h"
 
+/*
+ * Constructor - sets default values for Sniper's properties
+ * Lower HP and movement, but high attack range and damage
+ */
 ASniper::ASniper()
 {
     
@@ -16,6 +20,10 @@ ASniper::ASniper()
     UnitTypeDisplayName = TEXT("Sniper");
 }
 
+/*
+ * Called when the game starts
+ * Initializes the Sniper unit
+ */
 void ASniper::BeginPlay()
 {
     Super::BeginPlay();

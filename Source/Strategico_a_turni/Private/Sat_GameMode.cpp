@@ -13,6 +13,7 @@
 #include "Components/Button.h"
 #include "Kismet/GameplayStatics.h"
 
+//  Constructor - initializes default values and widget classes
 ASaT_GameMode::ASaT_GameMode()
 {
     // Default initialization
@@ -53,17 +54,16 @@ ASaT_GameMode::ASaT_GameMode()
 
 }
 
+// Called when the game starts - initializes the grid, players, and UI
 void ASaT_GameMode::BeginPlay()
 {
     Super::BeginPlay();
 
-    // First ensure we have a GridManager
     if (!Gmanager && GameManagerClass)
     {
         Gmanager = GetWorld()->SpawnActor<AGridManager>(GameManagerClass);
     }
 
-    // As a fallback, try to find an existing GridManager in the world
     if (!Gmanager)
     {
         TArray<AActor*> FoundGrids;
@@ -78,7 +78,6 @@ void ASaT_GameMode::BeginPlay()
     // Initialize players
     InitializePlayers();
 
-    // Only position the camera if we have both a GridManager and a HumanPlayer
     if (Gmanager && Players.IsValidIndex(0))
     {
         float CameraPosX = ((Gmanager->TileSize * Gmanager->Size) + ((Gmanager->Size - 1) * Gmanager->TileSize * Gmanager->CellPadding)) * 0.5f;
@@ -226,6 +225,10 @@ void ASaT_GameMode::OnHardModeSelected()
     }
 }
 
+/*
+ * Initializes all players at the start of the game
+ * Finds human and AI players and sets their properties
+ */
 void ASaT_GameMode::InitializePlayers()
 {
     // Find all players implementing the ISaT_PlayerInterface
@@ -256,9 +259,6 @@ void ASaT_GameMode::InitializePlayers()
             }
         }
     }
-
-    // Add players to array in the CORRECT ORDER
-    // IMPORTANT: Human MUST be index 0, AI MUST be index 1
     if (HumanPlayerInterface)
     {
         Players.Add(HumanPlayerInterface);
@@ -284,28 +284,17 @@ void ASaT_GameMode::InitializePlayers()
             Player->GameInstance = GameInstance;
         }
     }
-
-    // Verify our player array is correctly initialized
-    UE_LOG(LogTemp, Warning, TEXT("Successfully initialized %d players (1 Human, 1 AI)"), Players.Num());
-    for (int32 i = 0; i < Players.Num(); i++)
-    {
-        bool bIsHuman = Cast<ASaT_HumanPlayer>(Players[i]->_getUObject()) != nullptr;
-        UE_LOG(LogTemp, Warning, TEXT("Player[%d]: Type=%s, PlayerNumber=%d"),
-            i,
-            bIsHuman ? TEXT("Human") : TEXT("AI"),
-            Players[i]->PlayerNumber);
-    }
 }
 
+/*
+ * Initializes and starts the game
+ * Sets up the grid and initiates the first turn
+ */
 void ASaT_GameMode::StartGame()
 {
-    UE_LOG(LogTemp, Warning, TEXT("===== START GAME FUNCTION CALLED ====="));
-
     // Double-check if GridManager exists
     if (!Gmanager)
     {
-        UE_LOG(LogTemp, Error, TEXT("GridManager is NULL, trying to find it..."));
-
         // Last attempt to find the GridManager
         TArray<AActor*> FoundGrids;
         UGameplayStatics::GetAllActorsOfClass(GetWorld(), AGridManager::StaticClass(), FoundGrids);
@@ -313,7 +302,6 @@ void ASaT_GameMode::StartGame()
         if (FoundGrids.Num() > 0)
         {
             Gmanager = Cast<AGridManager>(FoundGrids[0]);
-            UE_LOG(LogTemp, Warning, TEXT("Found GridManager in last attempt!"));
         }
         else
         {
@@ -329,19 +317,15 @@ void ASaT_GameMode::StartGame()
         return;
     }
 
-    UE_LOG(LogTemp, Warning, TEXT("GridManager and Players are valid. Starting game..."));
-
-
-
     // Flip a coin to decide who goes first
     FlipCoinToDecideFirstPlayer();
 
     // Set game to playing phase
     USaT_GameInstance* GameInstance = Cast<USaT_GameInstance>(UGameplayStatics::GetGameInstance(GetWorld()));
 
-    if (GameInstance) {
+    if (GameInstance) 
+    {
         GameInstance->SetGamePhase(EGamePhase::SETUP);
-        UE_LOG(LogTemp, Warning, TEXT("Game phase set to SETUP"));
     }
 
     // Start first turn
@@ -349,20 +333,19 @@ void ASaT_GameMode::StartGame()
 
     UpdateGameHUD();
 
-    UE_LOG(LogTemp, Warning, TEXT("===== GAME SUCCESSFULLY STARTED ====="));
-
 }
 
+/*
+ * Randomly determines which player starts the game
+ * Updates game state and shows the coin flip result
+ */
 void ASaT_GameMode::FlipCoinToDecideFirstPlayer()
 {
-    UE_LOG(LogTemp, Warning, TEXT("===== FLIPPING COIN TO DECIDE FIRST PLAYER ====="));
-
     ShowCoinFlipResultWidget(true);
 
-    // Simple random 50/50 chance to determine who goes first
+    // Random 50/50 chance to determine who goes first
     bool bHumanWinsFlip = FMath::RandBool();
 
-    // Make sure we have valid players
     if (Players.Num() < 2)
     {
         UE_LOG(LogTemp, Error, TEXT("Not enough players for coin flip! Found %d, need at least 2"), Players.Num());
@@ -377,24 +360,12 @@ void ASaT_GameMode::FlipCoinToDecideFirstPlayer()
         return;
     }
 
-    // CRITICAL FIX: Update GameInstance's turn state and call its built-in coin toss function
     GameInstance->bPlayerStartsFirst = bHumanWinsFlip;
     GameInstance->bIsPlayerTurn = bHumanWinsFlip;
 
     // Sync GameMode's state with GameInstance
     CurrentPlayer = bHumanWinsFlip ? 0 : 1; // 0 = Human, 1 = AI
     CurrentPlayerType = bHumanWinsFlip ? EPlayerType::Human : EPlayerType::AI;
-
-    // Log the result more clearly
-    UE_LOG(LogTemp, Warning, TEXT("*** COIN FLIP RESULT: %s player goes first (Player index: %d) ***"),
-        bHumanWinsFlip ? TEXT("HUMAN") : TEXT("AI"),
-        CurrentPlayer);
-
-    // Log the GameInstance state after coin flip
-    UE_LOG(LogTemp, Warning, TEXT("GameInstance bPlayerStartsFirst = %s, bIsPlayerTurn = %s, GameMode CurrentPlayer = %d"),
-        GameInstance->bPlayerStartsFirst ? TEXT("TRUE (Human)") : TEXT("FALSE (AI)"),
-        GameInstance->bIsPlayerTurn ? TEXT("TRUE (Human)") : TEXT("FALSE (AI)"),
-        CurrentPlayer);
 
     CoinflipResult = bHumanWinsFlip
         ? FString::Printf(TEXT("YOU go first"))
@@ -417,9 +388,12 @@ void ASaT_GameMode::FlipCoinToDecideFirstPlayer()
 
 }
 
+/*
+ * Initializes the first turn after game start
+ * Syncs with GameInstance and notifies the starting player
+ */
 void ASaT_GameMode::StartFirstTurn()
 {
-    UE_LOG(LogTemp, Warning, TEXT("===== STARTING FIRST TURN ====="));
 
     // Get the game instance to verify turn state
     USaT_GameInstance* GameInstance = Cast<USaT_GameInstance>(UGameplayStatics::GetGameInstance(GetWorld()));
@@ -429,11 +403,9 @@ void ASaT_GameMode::StartFirstTurn()
         return;
     }
 
-    // CRITICAL FIX: Ensure GameMode's CurrentPlayer is synchronized with GameInstance
     bool bHumanGoesFirst = GameInstance->bPlayerStartsFirst;
     bool bIsHumanTurn = GameInstance->bIsPlayerTurn;
 
-    // Verify these values are consistent
     if (bHumanGoesFirst != bIsHumanTurn)
     {
         UE_LOG(LogTemp, Error, TEXT("GameInstance turn state inconsistency! bPlayerStartsFirst=%s but bIsPlayerTurn=%s"),
@@ -449,21 +421,13 @@ void ASaT_GameMode::StartFirstTurn()
     CurrentPlayer = bIsHumanTurn ? 0 : 1;
     CurrentPlayerType = bIsHumanTurn ? EPlayerType::Human : EPlayerType::AI;
 
-    UE_LOG(LogTemp, Warning, TEXT("First turn starting for %s player (index %d)"),
-        CurrentPlayerType == EPlayerType::Human ? TEXT("Human") : TEXT("AI"),
-        CurrentPlayer);
-
     // Update the player IsMyTurn flags based on CurrentPlayer
     for (int32 i = 0; i < Players.Num(); i++)
     {
-        // Only the current player should have IsMyTurn = true
         Players[i]->IsMyTurn = (i == CurrentPlayer);
 
-        UE_LOG(LogTemp, Warning, TEXT("StartFirstTurn: Player %d IsMyTurn set to %s"),
-            i, Players[i]->IsMyTurn ? TEXT("TRUE") : TEXT("FALSE"));
     }
 
-    // Clear any pending timers
     GetWorldTimerManager().ClearAllTimersForObject(this);
 
     // Add a short delay before notifying the current player
@@ -471,10 +435,12 @@ void ASaT_GameMode::StartFirstTurn()
     GetWorldTimerManager().SetTimer(TimerHandle, this, &ASaT_GameMode::NotifyCurrentPlayerTurn, 0.5f, false);
 }
 
+/*
+ * Ends the current player's turn
+ * Switches to the next player and updates game state
+ */
 void ASaT_GameMode::EndTurn()
 {
-    UE_LOG(LogTemp, Warning, TEXT("===== END TURN CALLED ====="));
-
     // Check if game is over before switching turns
     if (CheckGameOver())
     {
@@ -490,7 +456,6 @@ void ASaT_GameMode::EndTurn()
         return;
     }
 
-    // First, make sure current player is no longer in their turn
     if (Players.IsValidIndex(CurrentPlayer))
     {
         Players[CurrentPlayer]->IsMyTurn = false;
@@ -498,17 +463,12 @@ void ASaT_GameMode::EndTurn()
     }
 
     // Let GameInstance handle turn switching
-    UE_LOG(LogTemp, Warning, TEXT("Telling GameInstance to switch turns"));
     GameInstance->SwitchTurn();
 
     // After switching, update our CurrentPlayer based on the new GameInstance state
     bool bIsHumanTurn = GameInstance->bIsPlayerTurn;
     CurrentPlayer = bIsHumanTurn ? 0 : 1;
     CurrentPlayerType = bIsHumanTurn ? EPlayerType::Human : EPlayerType::AI;
-
-    UE_LOG(LogTemp, Warning, TEXT("After turn switch - Current turn is now: %s (player index %d)"),
-        bIsHumanTurn ? TEXT("HUMAN") : TEXT("AI"),
-        CurrentPlayer);
 
     UpdateGameHUD();
 
@@ -517,6 +477,10 @@ void ASaT_GameMode::EndTurn()
     GetWorldTimerManager().SetTimer(TimerHandle, this, &ASaT_GameMode::NotifyCurrentPlayerTurn, 0.1f, false);
 }
 
+/*
+ * Checks if the game is over and handles win/lose conditions
+ * @return True if the game is over, false otherwise
+ */
 bool ASaT_GameMode::CheckGameOver()
 {
     // Get the current game phase from GameInstance
@@ -591,7 +555,6 @@ bool ASaT_GameMode::CheckGameOver()
         }
 
         // Only check for potential draw if we're in the PLAYING phase
-        // and both players still have EXACTLY ONE unit alive
         bool bPotentialDraw = false;
         if (HumanUnitCount == 1 && AIUnitCount == 1)
         {
@@ -625,9 +588,14 @@ bool ASaT_GameMode::CheckGameOver()
     return false;
 }
 
+/*
+ * Checks for a potential draw between two units
+ * @param HumanUnits Array of human player units
+ * @param AIUnits Array of AI player units
+ * @return True if a draw condition is detected
+ */
 bool ASaT_GameMode::CheckPotentialDraw(const TArray<AUnit*>& HumanUnits, const TArray<AUnit*>& AIUnits)
 {
-    // Only proceed with the draw check if we have exactly one unit on each side
     if (HumanUnits.Num() != 1 || AIUnits.Num() != 1)
         return false;
 
@@ -635,15 +603,13 @@ bool ASaT_GameMode::CheckPotentialDraw(const TArray<AUnit*>& HumanUnits, const T
     AUnit* HumanUnit = HumanUnits[0];
     AUnit* AIUnit = AIUnits[0];
 
-    // Verify units are still alive as an extra safety check
+    // Verify units are still alive
     if (!HumanUnit->IsAlive() || !AIUnit->IsAlive())
         return false;
 
-    // Special draw condition: only happens with two snipers
     ASniper* HumanSniper = Cast<ASniper>(HumanUnit);
     ASniper* AISniper = Cast<ASniper>(AIUnit);
 
-    // Draw condition requires BOTH to be snipers
     if (!HumanSniper || !AISniper)
         return false;
 
@@ -658,23 +624,22 @@ bool ASaT_GameMode::CheckPotentialDraw(const TArray<AUnit*>& HumanUnits, const T
     if (!HumanCanAttackAI || !AICanAttackHuman)
         return false;
 
-    // We need to simulate counterattack damage 
+    // Simulate counterattack damage 
     int32 CounterAttackDamage = 1; // Minimum counterattack damage
 
     // Only declare draw if both units would kill each other with minimum counterattack
     bool HumanWouldDie = (HumanSniper->Hp <= CounterAttackDamage);
     bool AIWouldDie = (AISniper->Hp <= CounterAttackDamage);
 
-    UE_LOG(LogTemp, Warning, TEXT("DRAW CHECK: Human HP: %d, AI HP: %d, CounterDamage: %d, Both would die: %s"),
-        HumanSniper->Hp, AISniper->Hp, CounterAttackDamage,
-        (HumanWouldDie && AIWouldDie) ? TEXT("YES") : TEXT("NO"));
-
     return HumanWouldDie && AIWouldDie;
 }
 
+/*
+ * Handles special draw conditions in the game
+ * Checks for mutual destruction or stalemate scenarios
+ */
 void ASaT_GameMode::HandleDrawCondition()
 {
-    // Count ALL units on the board for an absolute verification
     TArray<AActor*> AllUnits;
     UGameplayStatics::GetAllActorsOfClass(GetWorld(), AUnit::StaticClass(), AllUnits);
 
@@ -702,14 +667,6 @@ void ASaT_GameMode::HandleDrawCondition()
         }
     }
 
-    UE_LOG(LogTemp, Warning, TEXT("Draw condition check: Human units alive: %d, AI units alive: %d"),
-        HumanUnitsAlive, AIUnitsAlive);
-
-    // There are 3 valid draw cases:
-    // 1. No units left on either side (mutual destruction happened)
-    // 2. Each team has exactly ONE unit, both are Snipers, both at 1 HP, and in range of each other
-    // 3. Explicit decision based on turn limit (not implemented yet)
-
     bool bValidDrawCondition = false;
 
     // Case 1: No units left on either side
@@ -718,7 +675,7 @@ void ASaT_GameMode::HandleDrawCondition()
         bValidDrawCondition = true;
         UE_LOG(LogTemp, Warning, TEXT("Draw condition: No units left on either side"));
     }
-    // Case 2: One unit each, both are snipers at 1 HP
+    // Case 2: One unit each
     else if (HumanUnitsAlive == 1 && AIUnitsAlive == 1)
     {
         // Verify both are snipers
@@ -730,21 +687,17 @@ void ASaT_GameMode::HandleDrawCondition()
 
         if (!HumanSniper || !AISniper)
         {
-            // If either unit is not a sniper, this is not a valid draw
             UE_LOG(LogTemp, Warning, TEXT("Invalid draw: Units are not both snipers"));
             return;
         }
 
-        // Both must have 1 HP and be in range of each other
         if (HumanSniper->Hp == 1 && AISniper->Hp == 1 &&
             HumanSniper->IsTargetInRange(AISniper) && AISniper->IsTargetInRange(HumanSniper))
         {
             bValidDrawCondition = true;
-            UE_LOG(LogTemp, Warning, TEXT("Draw condition: Both snipers at 1 HP and in range"));
         }
         else
         {
-            UE_LOG(LogTemp, Warning, TEXT("Invalid draw: Snipers must both have 1 HP and be in range"));
             return;
         }
     }
@@ -778,28 +731,25 @@ void ASaT_GameMode::HandleDrawCondition()
                     PlayerInterface->OnDraw();
                 }
             }
-
-            // Log the draw
-            UE_LOG(LogTemp, Warning, TEXT("GAME OVER: Match ended in a DRAW!"));
         }
     }
 }
 
+/*
+ * Legacy method for switching to the next player
+ * Redirects to EndTurn for consistency
+ */
 void ASaT_GameMode::TurnNextPlayer()
 {
-    UE_LOG(LogTemp, Warning, TEXT("===== TURNING NEXT PLAYER ====="));
-
-    // This method shouldn't be called anymore - redirect to EndTurn
-    UE_LOG(LogTemp, Warning, TEXT("TurnNextPlayer called - redirecting to EndTurn for consistency"));
     EndTurn();
 }
 
+/*
+ * Notifies the current player that it's their turn
+ * Resets unit flags and updates game state
+ */
 void ASaT_GameMode::NotifyCurrentPlayerTurn()
 {
-    // DEBUGGING
-    UE_LOG(LogTemp, Warning, TEXT("==== DEBUG: NotifyCurrentPlayerTurn ENTRY ===="));
-    UE_LOG(LogTemp, Warning, TEXT("CurrentPlayer=%d, Players.Num()=%d"), CurrentPlayer, Players.Num());
-
     // Get the GameInstance
     USaT_GameInstance* GameInstance = Cast<USaT_GameInstance>(UGameplayStatics::GetGameInstance(GetWorld()));
     if (!GameInstance)
@@ -842,27 +792,22 @@ void ASaT_GameMode::NotifyCurrentPlayerTurn()
         }
     }
 
-    // CRITICAL FIX: Always ensure CurrentPlayer matches GameInstance state
     int32 ExpectedPlayerIndex = bIsHumanTurn ? 0 : 1;
 
     // If there's a mismatch, correct it
     if (CurrentPlayer != ExpectedPlayerIndex)
     {
-        UE_LOG(LogTemp, Warning, TEXT("Correcting player index mismatch! CurrentPlayer=%d but GameInstance says %s turn"),
-            CurrentPlayer, bIsHumanTurn ? TEXT("Human") : TEXT("AI"));
-
         CurrentPlayer = ExpectedPlayerIndex;
         CurrentPlayerType = bIsHumanTurn ? EPlayerType::Human : EPlayerType::AI;
     }
 
-    // Safety check on array bounds
     if (!Players.IsValidIndex(CurrentPlayer))
     {
         UE_LOG(LogTemp, Error, TEXT("NotifyCurrentPlayerTurn: Invalid player index %d"), CurrentPlayer);
         return;
     }
 
-    // Update all player turn flags to be consistent
+    // Update all player turn flags
     for (int32 i = 0; i < Players.Num(); i++)
     {
         Players[i]->IsMyTurn = (i == CurrentPlayer);
@@ -871,20 +816,16 @@ void ASaT_GameMode::NotifyCurrentPlayerTurn()
     ISaT_PlayerInterface* PlayerToNotify = Players[CurrentPlayer];
     if (PlayerToNotify)
     {
-        UE_LOG(LogTemp, Warning, TEXT("Directly notifying player at index %d - IsHuman: %s"),
-            CurrentPlayer, bIsHumanTurn ? TEXT("TRUE") : TEXT("FALSE"));
-
         // Double-check one more time - is this really the right player?
         bool bIsPlayerHuman = (Cast<ASaT_HumanPlayer>(PlayerToNotify->_getUObject()) != nullptr);
 
         if (bIsPlayerHuman == bIsHumanTurn)
         {
-            // The player type matches the turn state - go ahead and notify
             PlayerToNotify->OnTurn();
         }
         else
         {
-            // We have a mismatch! Log it and abort this notification
+            // We have a mismatch!
             UE_LOG(LogTemp, Error, TEXT("TURN STATE MISMATCH! Trying to notify %s player when it's %s turn!"),
                 bIsPlayerHuman ? TEXT("Human") : TEXT("AI"),
                 bIsHumanTurn ? TEXT("Human") : TEXT("AI"));
@@ -898,14 +839,14 @@ void ASaT_GameMode::NotifyCurrentPlayerTurn()
     UpdateGameHUD();
 }
 
+/*
+ * Called when a unit dies to update game state
+ * @param DeadUnit The unit that died
+ */
 void ASaT_GameMode::NotifyUnitDeath(AUnit* DeadUnit)
 {
     if (!DeadUnit)
         return;
-
-    // Log the death
-    UE_LOG(LogTemp, Warning, TEXT("Unit death: %s at position (%d,%d)"),
-        *DeadUnit->GetName(), DeadUnit->GridX, DeadUnit->GridY);
 
     // Check if this affects game over conditions
     CheckGameOver();
@@ -914,6 +855,10 @@ void ASaT_GameMode::NotifyUnitDeath(AUnit* DeadUnit)
     UpdateGameHUD();
 }
 
+/*
+ * Updates all UI elements with current game state
+ * Retrieves unit information and updates HUD displays
+ */
 void ASaT_GameMode::UpdateGameHUD()
 {
     // Find all player units and get their status
@@ -1030,18 +975,22 @@ void ASaT_GameMode::UpdateGameHUD()
     {
         TurnText = TEXT("Game Initializing...");
     }
-
-    // Debug log to verify updates
-    UE_LOG(LogTemp, Display, TEXT("UI Updated - Turn: %s, PlayerSniper: %s, PlayerBrawler: %s"),
-        *TurnText, *PlayerSniperHPFormatted, *PlayerBrawlerHPFormatted);
 }
 
+/*
+ * Sets the currently selected unit
+ * @param Unit The unit to select
+ */
 void ASaT_GameMode::SetSelectedUnit(AUnit* Unit)
 {
 
     CurrentlySelectedUnit = Unit;
 }
 
+/*
+ * Gets information text about the currently selected unit
+ * @return String with unit information or "No Unit Selected"
+ */
 FString ASaT_GameMode::GetSelectedUnitInfoText() const
 {
     if (CurrentlySelectedUnit && CurrentlySelectedUnit->IsAlive())
@@ -1057,7 +1006,16 @@ FString ASaT_GameMode::GetSelectedUnitInfoText() const
     return TEXT("No Unit Selected");
 }
 
-
+/*
+ * Add a formatted move entry to the game log history
+ *
+ * @param bIsPlayerUnit Whether the unit belongs to the human player (true) or AI (false)
+ * @param UnitType The type of unit making the move ("Sniper" or "Brawler")
+ * @param ActionType The type of action ("Move", "Attack", "Skip", "Place")
+ * @param FromPosition The starting position for a move, or the attacker position for an attack
+ * @param ToPosition The destination position for a move, or the target position for an attack
+ * @param Damage The amount of damage dealt in an attack (0 for non-attack actions)
+ */
 void ASaT_GameMode::AddFormattedMoveToLog(bool bIsPlayerUnit, const FString& UnitType, const FString& ActionType,
     const FVector2D& FromPosition, const FVector2D& ToPosition, int32 Damage)
 {
@@ -1108,13 +1066,6 @@ void ASaT_GameMode::AddFormattedMoveToLog(bool bIsPlayerUnit, const FString& Uni
             *ToPosStr,
             Damage);
     }
-    else if (ActionType == TEXT("Skip"))
-    {
-        // Format: PLAYER: Sniper skips turn
-        MoveEntry = FString::Printf(TEXT("%s: %s skips turn"),
-            *PlayerIdentifier,
-            *UnitType);
-    }
     else if (ActionType == TEXT("Place"))
     {
         // Format: PLAYER: Placed Sniper at position G8
@@ -1124,7 +1075,7 @@ void ASaT_GameMode::AddFormattedMoveToLog(bool bIsPlayerUnit, const FString& Uni
             *ToPosStr);
     }
 
-    // IMPROVED: Check for duplicates in the raw move history (without turn numbers)
+    // IMPROVED: Check for duplicates in the raw move history
     bool bEntryExists = false;
     for (const FString& ExistingEntry : RawMoveHistory)
     {
@@ -1164,9 +1115,6 @@ void ASaT_GameMode::AddFormattedMoveToLog(bool bIsPlayerUnit, const FString& Uni
                 RawMoveHistory.RemoveAt(0);
             }
 
-            // Log for debugging
-            UE_LOG(LogTemp, Display, TEXT("Game Log: %s"), *TurnPrefixedEntry);
-
             // Update the UI
             UpdateGameHUD();
         }
@@ -1177,6 +1125,10 @@ void ASaT_GameMode::AddFormattedMoveToLog(bool bIsPlayerUnit, const FString& Uni
     }
 }
 
+/*
+ * Get the formatted move history as a string
+ * @return String containing all move history entries
+ */
 FString ASaT_GameMode::GetFormattedGameLog() const
 {
     FString History;
@@ -1193,6 +1145,10 @@ FString ASaT_GameMode::GetFormattedGameLog() const
     return History;
 }
 
+/*
+ * Shows or hides the AI thinking widget
+ * @param bShow Whether to show (true) or hide (false) the widget
+ */
 void ASaT_GameMode::ShowAIThinkingWidget(bool bShow)
 {
     APlayerController* PC = GetWorld()->GetFirstPlayerController();
@@ -1224,6 +1180,10 @@ void ASaT_GameMode::ShowAIThinkingWidget(bool bShow)
     }
 }
 
+/*
+ * Shows or hides the coin flip result widget
+ * @param bShow Whether to show (true) or hide (false) the widget
+ */
 void ASaT_GameMode::ShowCoinFlipResultWidget(bool bShow)
 {
     APlayerController* PC = GetWorld()->GetFirstPlayerController();
@@ -1256,12 +1216,18 @@ void ASaT_GameMode::ShowCoinFlipResultWidget(bool bShow)
     }
 }
 
+// Convenience method to hide the coin flip widget
 void ASaT_GameMode::HideCoinFlipWidget()
 {
-    UE_LOG(LogTemp, Warning, TEXT("Hiding Coin Flip Result Widget"));
     ShowCoinFlipResultWidget(false);
 }
 
+
+/*
+ * Shows or hides the game over widget
+ * Sets up the reset button and input mode
+ * @param bShow Whether to show (true) or hide (false) the widget
+ */
 void ASaT_GameMode::ShowGameOverWidget(bool bShow)
 {
     APlayerController* PC = GetWorld()->GetFirstPlayerController();
@@ -1292,21 +1258,17 @@ void ASaT_GameMode::ShowGameOverWidget(bool bShow)
             {
                 ResetButton->OnClicked.Clear(); // Clear any existing bindings
                 ResetButton->OnClicked.AddDynamic(this, &ASaT_GameMode::ResetGame);
-                UE_LOG(LogTemp, Warning, TEXT("Reset Button bound successfully"));
             }
             else
             {
                 UE_LOG(LogTemp, Error, TEXT("Failed to find Reset button in widget!"));
             }
 
-            // IMPORTANT: Use GameAndUI mode consistently
             FInputModeGameAndUI InputMode;
             InputMode.SetWidgetToFocus(GameOverWidget->TakeWidget());
             InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
             PC->SetInputMode(InputMode);
             PC->bShowMouseCursor = true;
-
-            UE_LOG(LogTemp, Warning, TEXT("Game Over widget set up with proper focus"));
         }
         else
         {
@@ -1320,6 +1282,10 @@ void ASaT_GameMode::ShowGameOverWidget(bool bShow)
     }
 }
 
+/*
+ * Resets the game to its initial state
+ * Destroys all units and tiles, regenerates the grid, and starts a new game
+ */
 void ASaT_GameMode::ResetGame()
 {
     // Ensure we have a valid GameInstance

@@ -16,6 +16,7 @@
 #include "SaT_GameInstance.h"
 #include "UObject/ConstructorHelpers.h"
 
+// Constructor - initializes default values, components, and widget classes
 ASaT_HumanPlayer::ASaT_HumanPlayer()
 {
     PrimaryActorTick.bCanEverTick = true;
@@ -27,7 +28,6 @@ ASaT_HumanPlayer::ASaT_HumanPlayer()
 
     UnitSelectionWidget = nullptr;
 
-    // Adding hard-coded defaults for classes - these will be overridden by BP values if set
     static ConstructorHelpers::FClassFinder<ASniper> DefaultSniperClass(TEXT("/Game/Blueprints/BP_Sniper"));
     if (DefaultSniperClass.Succeeded())
     {
@@ -59,6 +59,7 @@ ASaT_HumanPlayer::ASaT_HumanPlayer()
     }
 }
 
+// Called when the game starts - initializes player state, references, and validates components
 void ASaT_HumanPlayer::BeginPlay()
 {
     Super::BeginPlay();
@@ -83,13 +84,11 @@ void ASaT_HumanPlayer::BeginPlay()
 
     if (!SniperClass)
     {
-        UE_LOG(LogTemp, Error, TEXT("SniperClass is NULL! Falling back to base class."));
         SniperClass = ASniper::StaticClass();
     }
 
     if (!BrawlerClass)
     {
-        UE_LOG(LogTemp, Error, TEXT("BrawlerClass is NULL! Falling back to base class."));
         BrawlerClass = ABrawler::StaticClass();
     }
 
@@ -105,28 +104,9 @@ void ASaT_HumanPlayer::BeginPlay()
     if (FoundGrids.Num() > 0)
     {
         GridManager = Cast<AGridManager>(FoundGrids[0]);
-        //if (GridManager)
-        //{
-        //    UE_LOG(LogTemp, Display, TEXT("GridManager found and assigned"));
-
-        //    // Position camera above grid center
-        //    float GridSize = GridManager->Size * GridManager->TileSize;
-        //    float CameraHeight = 2000.0f;
-
-        //    // Position camera at grid center
-        //    SetActorLocation(FVector(GridSize / 2, GridSize / 2, CameraHeight));
-
-        //    UE_LOG(LogTemp, Warning, TEXT("Camera positioned at grid center: X=%f, Y=%f, Z=%f"),
-        //        GridSize / 2, GridSize / 2, CameraHeight);
-        //}
-        //else
-        //{
-        //    UE_LOG(LogTemp, Warning, TEXT("GridManager not found in scene!"));
-        //}
     }
 
     // Validate class references
-
     if (EndTurnButtonWidgetClass)
     {
         UE_LOG(LogTemp, Display, TEXT("EndTurnButtonWidgetClass is properly set"));
@@ -169,22 +149,22 @@ void ASaT_HumanPlayer::BeginPlay()
     {
         // Set IsMyTurn based on GameInstance's turn state
         IsMyTurn = GameInstance->bIsPlayerTurn;
-        UE_LOG(LogTemp, Warning, TEXT("Human Player's turn initialized: %s"),
-            IsMyTurn ? TEXT("TRUE") : TEXT("FALSE"));
     }
 }
 
+// Called every frame to update player state
 void ASaT_HumanPlayer::Tick(float DeltaTime)
 {
     Super::Tick(DeltaTime);
 }
 
+// Configures input bindings for the player
 void ASaT_HumanPlayer::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
 {
     Super::SetupPlayerInputComponent(PlayerInputComponent);
-    // Input handled by controller
 }
 
+// Called when it's the player's turn - prepares UI and initializes turn state
 void ASaT_HumanPlayer::OnTurn()
 {
     // Make sure we have a reference to the GameInstance
@@ -193,10 +173,8 @@ void ASaT_HumanPlayer::OnTurn()
         GameInstance = Cast<USaT_GameInstance>(UGameplayStatics::GetGameInstance(GetWorld()));
     }
 
-    // Very important - check if it's really our turn
     if (GameInstance && !GameInstance->bIsPlayerTurn)
     {
-        UE_LOG(LogTemp, Error, TEXT("Human: OnTurn called but GameInstance says it's AI's turn! Ignoring."));
         IsMyTurn = false; // Ensure flag is correct
         return;
     }
@@ -219,25 +197,12 @@ void ASaT_HumanPlayer::OnTurn()
         PC->bShowMouseCursor = true;
     }
 
-    UE_LOG(LogTemp, Warning, TEXT("Human Player Turn Started - Verification PASSED"));
-
-    // Explicitly set this player's turn flag to true
     IsMyTurn = true;
-    UE_LOG(LogTemp, Warning, TEXT("Human: IsMyTurn set to TRUE"));
 
     if (GameInstance)
     {
         // Update the class member directly instead of creating a local variable
         CurrentPhase = GameInstance->GetGamePhase();
-
-        // Log the current phase for debugging
-        UE_LOG(LogTemp, Warning, TEXT("Human Player - Current game phase: %s"),
-            CurrentPhase == EGamePhase::SETUP ? TEXT("SETUP") :
-            CurrentPhase == EGamePhase::PLAYING ? TEXT("PLAYING") : TEXT("GAMEOVER"));
-
-        // Log the number of units placed by each player
-        UE_LOG(LogTemp, Warning, TEXT("Units placed - Human: %d, AI: %d"),
-            GameInstance->HumanUnitsPlaced, GameInstance->AIUnitsPlaced);
 
         if (CurrentPhase == EGamePhase::SETUP)
         {
@@ -255,7 +220,6 @@ void ASaT_HumanPlayer::OnTurn()
             // In setup phase, check if all units are placed
             if (HasPlacedAllUnits())
             {
-                UE_LOG(LogTemp, Warning, TEXT("Human player has already placed all units!"));
                 // End turn automatically
                 EndTurn();
             }
@@ -272,13 +236,10 @@ void ASaT_HumanPlayer::OnTurn()
             {
                 EndTurnWidget->RemoveFromParent();
                 EndTurnWidget = nullptr;
-                UE_LOG(LogTemp, Warning, TEXT("End Turn button removed during SETUP phase"));
             }
         }
         else if (CurrentPhase == EGamePhase::PLAYING)
         {
-            UE_LOG(LogTemp, Warning, TEXT("Human player turn in PLAYING phase"));
-
             // Only show the end turn button during the PLAYING phase
             ShowEndTurnButton();
         }
@@ -289,33 +250,31 @@ void ASaT_HumanPlayer::OnTurn()
     }
 }
 
+// Implementation for when the player wins the game
 void ASaT_HumanPlayer::OnWin()
 {
-    // Implementation for when the player wins
     UE_LOG(LogTemp, Warning, TEXT("Human Player has won!"));
-
 }
 
+// Implementation for when the player loses the game
 void ASaT_HumanPlayer::OnLose()
 {
-    // Implementation for when the player loses
     UE_LOG(LogTemp, Warning, TEXT("Human Player has lost!"));
-
 }
 
+// Implementation for when the game ends in a draw
 void ASaT_HumanPlayer::OnDraw()
 {
-
     UE_LOG(LogTemp, Warning, TEXT("Human Player: Game ended in a draw"));
-
 }
 
-// Implement HasPlacedAllUnits
+// Checks if player has placed all required units during setup phase
 bool ASaT_HumanPlayer::HasPlacedAllUnits() const
 {
     return PlacedUnitsCount >= UnitsToPlace;
 }
 
+// Places a new unit on the grid at the specified coordinates
 void ASaT_HumanPlayer::PlaceUnit(int32 GridX, int32 GridY, bool bIsSniper)
 {
 
@@ -325,9 +284,6 @@ void ASaT_HumanPlayer::PlaceUnit(int32 GridX, int32 GridY, bool bIsSniper)
             PlacedUnitsCount, UnitsToPlace);
         return;
     }
-
-    // Add detailed logs
-    UE_LOG(LogTemp, Warning, TEXT("PlaceUnit called with coordinates: X=%d, Y=%d"), GridX, GridY);
 
     // Check class references
     if (bIsSniper && !SniperClass)
@@ -359,15 +315,11 @@ void ASaT_HumanPlayer::PlaceUnit(int32 GridX, int32 GridY, bool bIsSniper)
     if (GridManager)
     {
         SpawnLocation = GridManager->GetWorldLocationFromGrid(GridX, GridY);
-        UE_LOG(LogTemp, Warning, TEXT("Spawn location calculated: X=%f, Y=%f, Z=%f"),
-            SpawnLocation.X, SpawnLocation.Y, SpawnLocation.Z);
     }
     else
     {
         // Fallback if GridManager is invalid
         SpawnLocation = FVector(GridX * 100.0f, GridY * 100.0f, 0.0f);
-        UE_LOG(LogTemp, Warning, TEXT("GridManager invalid! Using fallback: X=%f, Y=%f, Z=%f"),
-            SpawnLocation.X, SpawnLocation.Y, SpawnLocation.Z);
     }
 
     // Create appropriate unit
@@ -378,12 +330,10 @@ void ASaT_HumanPlayer::PlaceUnit(int32 GridX, int32 GridY, bool bIsSniper)
     if (bIsSniper)
     {
         PlacedUnit = GetWorld()->SpawnActor<ASniper>(SniperClass, SpawnLocation, FRotator::ZeroRotator, SpawnParams);
-        UE_LOG(LogTemp, Display, TEXT("Sniper placed at %d, %d"), GridX, GridY);
     }
     else
     {
         PlacedUnit = GetWorld()->SpawnActor<ABrawler>(BrawlerClass, SpawnLocation, FRotator::ZeroRotator, SpawnParams);
-        UE_LOG(LogTemp, Display, TEXT("Brawler placed at %d, %d"), GridX, GridY);
     }
 
     // Configure unit
@@ -401,7 +351,6 @@ void ASaT_HumanPlayer::PlaceUnit(int32 GridX, int32 GridY, bool bIsSniper)
 
         // Increment placement count
         PlacedUnitsCount++;
-        UE_LOG(LogTemp, Warning, TEXT("Human player has placed %d/%d units"), PlacedUnitsCount, UnitsToPlace);
 
         // Update the GameInstance to track human units placed
         if (GameInstance)
@@ -430,6 +379,7 @@ void ASaT_HumanPlayer::PlaceUnit(int32 GridX, int32 GridY, bool bIsSniper)
     }
 }
 
+// Handles mouse click input during gameplay
 void ASaT_HumanPlayer::OnClick()
 {
     // Check if it's this player's turn
@@ -453,14 +403,11 @@ void ASaT_HumanPlayer::OnClick()
         return;
     }
 
-    // Use reliable hit detection
     FHitResult HitResult;
     bool bHitSuccess = PC->GetHitResultUnderCursor(ECC_Visibility, true, HitResult);
 
     if (bHitSuccess)
     {
-        UE_LOG(LogTemp, Warning, TEXT("Hit detected at world location: %s"), *HitResult.Location.ToString());
-
         // Find the clicked tile or closest tile
         ATile* ClickedTile = nullptr;
 
@@ -489,12 +436,8 @@ void ASaT_HumanPlayer::OnClick()
         // Process the clicked tile if found
         if (ClickedTile)
         {
-            // === SETUP PHASE HANDLING ===
             if (CurrentPhase == EGamePhase::SETUP)
             {
-                UE_LOG(LogTemp, Warning, TEXT("Setup phase: Selected tile at position: %d, %d"),
-                    ClickedTile->GridX, ClickedTile->GridY);
-
                 // Check if the tile is already occupied
                 if (ClickedTile->bIsOccupied)
                 {
@@ -502,14 +445,12 @@ void ASaT_HumanPlayer::OnClick()
                     return;
                 }
 
-                // Store selected tile coordinates
                 SelectedGridX = ClickedTile->GridX;
                 SelectedGridY = ClickedTile->GridY;
 
                 // Show unit selection widget
                 ShowUnitSelectionWidget();
             }
-            // === PLAYING PHASE HANDLING ===
             else if (CurrentPhase == EGamePhase::PLAYING)
             {
                 // Playing phase logic - handle unit or tile selection
@@ -527,13 +468,11 @@ void ASaT_HumanPlayer::OnClick()
     }
 }
 
+// Processes clicks during the playing phase - handles unit selection, movement, and attacks
 void ASaT_HumanPlayer::HandlePlayingPhaseClick(ATile* ClickedTile)
 {
     if (!ClickedTile)
         return;
-
-    UE_LOG(LogTemp, Warning, TEXT("Click detected in PLAYING phase on tile %d,%d"),
-        ClickedTile->GridX, ClickedTile->GridY);
 
     // Check if there's a unit on this tile
     AUnit* ClickedUnit = ClickedTile->OccupyingUnit;
@@ -573,8 +512,6 @@ void ASaT_HumanPlayer::HandlePlayingPhaseClick(ATile* ClickedTile)
             // If we click on the already selected unit, show action widget
             if (SelectedUnit == ClickedUnit)
             {
-                UE_LOG(LogTemp, Warning, TEXT("Showing action widget for unit at %d,%d"),
-                    ClickedUnit->GridX, ClickedUnit->GridY);
                 ShowMovementAndAttackWidget(ClickedUnit);
             }
             // Otherwise select the new unit
@@ -590,8 +527,6 @@ void ASaT_HumanPlayer::HandlePlayingPhaseClick(ATile* ClickedTile)
                 // Select new unit
                 SelectedUnit = ClickedUnit;
                 SelectedUnit->ShowSelected();
-                UE_LOG(LogTemp, Warning, TEXT("Selected unit at %d,%d"),
-                    SelectedUnit->GridX, SelectedUnit->GridY);
 
                 ASaT_GameMode* GameMode = Cast<ASaT_GameMode>(GetWorld()->GetAuthGameMode());
                 if (GameMode)
@@ -609,14 +544,9 @@ void ASaT_HumanPlayer::HandlePlayingPhaseClick(ATile* ClickedTile)
             // If we're in attack mode and have a unit selected, try to attack
             if (bAttackMode && SelectedUnit)
             {
-                UE_LOG(LogTemp, Warning, TEXT("Trying to attack enemy at %d,%d"),
-                    ClickedUnit->GridX, ClickedUnit->GridY);
-
                 bool bAttackSuccess = TryAttackUnit(SelectedUnit, ClickedUnit);
                 if (bAttackSuccess)
                 {
-                    UE_LOG(LogTemp, Warning, TEXT("Attack successful!"));
-
                     // Reset attack mode
                     bAttackMode = false;
                     ClearAllHighlightsAndPaths();
@@ -660,9 +590,6 @@ void ASaT_HumanPlayer::HandlePlayingPhaseClick(ATile* ClickedTile)
                     GridManager->ClearAllHighlights();
                     GridManager->HighlightPath(CurrentPath, true);
 
-                    // Move the unit
-                    UE_LOG(LogTemp, Warning, TEXT("Moving unit from %d,%d to %d,%d"),
-                        UnitToMove->GridX, UnitToMove->GridY, ClickedTile->GridX, ClickedTile->GridY);
 
                     // IMPORTANT: Save the old position
                     int32 OldGridX = UnitToMove->GridX;
@@ -714,8 +641,6 @@ void ASaT_HumanPlayer::HandlePlayingPhaseClick(ATile* ClickedTile)
             }
             else
             {
-                UE_LOG(LogTemp, Warning, TEXT("Target cell is not in movement range"));
-
                 // If clicked outside movement range, cancel move mode
                 bMoveMode = false;
             }
@@ -725,7 +650,6 @@ void ASaT_HumanPlayer::HandlePlayingPhaseClick(ATile* ClickedTile)
             // If clicked empty space while in attack mode, cancel attack mode
             bAttackMode = false;
             ClearAllHighlightsAndPaths();
-            UE_LOG(LogTemp, Warning, TEXT("Attack mode canceled"));
         }
         else
         {
@@ -734,6 +658,7 @@ void ASaT_HumanPlayer::HandlePlayingPhaseClick(ATile* ClickedTile)
     }
 }
 
+// Deselects the currently selected unit and clears highlights
 void ASaT_HumanPlayer::DeselectCurrentUnit()
 {
     if (SelectedUnit)
@@ -763,6 +688,7 @@ void ASaT_HumanPlayer::DeselectCurrentUnit()
     }
 }
 
+// Shows the widget for selecting unit type during placement
 void ASaT_HumanPlayer::ShowUnitSelectionWidget()
 {
 
@@ -823,12 +749,10 @@ void ASaT_HumanPlayer::ShowUnitSelectionWidget()
             if (Cast<ASniper>(Unit))
             {
                 bSniperPlaced = true;
-                UE_LOG(LogTemp, Warning, TEXT("Sniper already placed"));
             }
             else if (Cast<ABrawler>(Unit))
             {
                 bBrawlerPlaced = true;
-                UE_LOG(LogTemp, Warning, TEXT("Brawler already placed"));
             }
         }
     }
@@ -845,18 +769,16 @@ void ASaT_HumanPlayer::ShowUnitSelectionWidget()
     if (UnitSelectionWidget)
     {
         // Add to viewport first
-        UnitSelectionWidget->AddToViewport(10000); // High Z-order to be above other UI
+        UnitSelectionWidget->AddToViewport(10000);
 
         // Find buttons in widget
         UButton* SniperButton = Cast<UButton>(UnitSelectionWidget->GetWidgetFromName(TEXT("SniperButton")));
         UButton* BrawlerButton = Cast<UButton>(UnitSelectionWidget->GetWidgetFromName(TEXT("BrawlerButton")));
 
-        // Only bind events for units that haven't been placed yet
         if (SniperButton && !bSniperPlaced)
         {
             SniperButton->OnClicked.Clear(); // Clear any existing bindings
             SniperButton->OnClicked.AddDynamic(this, &ASaT_HumanPlayer::OnUnitWidgetSniperSelected);
-            UE_LOG(LogTemp, Display, TEXT("SniperButton found and bound to function"));
         }
         else if (SniperButton)
         {
@@ -871,7 +793,6 @@ void ASaT_HumanPlayer::ShowUnitSelectionWidget()
         {
             BrawlerButton->OnClicked.Clear(); // Clear any existing bindings
             BrawlerButton->OnClicked.AddDynamic(this, &ASaT_HumanPlayer::OnUnitWidgetBrawlerSelected);
-            UE_LOG(LogTemp, Display, TEXT("BrawlerButton found and bound to function"));
         }
         else if (BrawlerButton)
         {
@@ -885,17 +806,12 @@ void ASaT_HumanPlayer::ShowUnitSelectionWidget()
         // Set focus AFTER adding to viewport
         FInputModeGameAndUI InputMode;
 
-        // VERY IMPORTANT: This is the critical part - explicitly set focus to the widget
         InputMode.SetWidgetToFocus(UnitSelectionWidget->TakeWidget());
-
-        // Make sure mouse isn't locked
         InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
 
         // Apply input mode
         PC->SetInputMode(InputMode);
         PC->bShowMouseCursor = true;
-
-        UE_LOG(LogTemp, Warning, TEXT("Unit selection widget set up with proper focus"));
     }
     else
     {
@@ -903,6 +819,7 @@ void ASaT_HumanPlayer::ShowUnitSelectionWidget()
     }
 }
 
+// Handler for when the Sniper unit type is selected from the widget
 void ASaT_HumanPlayer::OnUnitWidgetSniperSelected()
 {
     // Hide widget and clean up reference
@@ -926,6 +843,7 @@ void ASaT_HumanPlayer::OnUnitWidgetSniperSelected()
     PlaceUnit(SelectedGridX, SelectedGridY, true);
 }
 
+// Handler for when the Brawler unit type is selected from the widget
 void ASaT_HumanPlayer::OnUnitWidgetBrawlerSelected()
 {
     // Hide widget
@@ -949,10 +867,9 @@ void ASaT_HumanPlayer::OnUnitWidgetBrawlerSelected()
     PlaceUnit(SelectedGridX, SelectedGridY, false);
 }
 
+// Ends the current player's turn and passes control to the AI
 void ASaT_HumanPlayer::EndTurn()
 {
-    UE_LOG(LogTemp, Warning, TEXT("Human Player ending turn"));
-
     DeselectCurrentUnit();
     ClearAllHighlightsAndPaths();
 
@@ -986,31 +903,25 @@ void ASaT_HumanPlayer::EndTurn()
     APlayerController* PC = GetWorld()->GetFirstPlayerController();
     if (PC)
     {
-        // Don't change input mode when ending turn, as we'll set it correctly
-        // when the next turn starts
         PC->bShowMouseCursor = true; // Keep cursor visible
     }
 
-    // Important: Set our own IsMyTurn to false BEFORE calling GameMode->EndTurn()
     IsMyTurn = false;
-    UE_LOG(LogTemp, Warning, TEXT("Human Player setting IsMyTurn to FALSE"));
 
     // Get the game mode and tell it to end the turn
     AGameModeBase* GameModeBase = UGameplayStatics::GetGameMode(GetWorld());
     ASaT_GameMode* GameMode = Cast<ASaT_GameMode>(GameModeBase);
     if (GameMode)
     {
-        UE_LOG(LogTemp, Warning, TEXT("Human Player calling GameMode->EndTurn()"));
         GameMode->EndTurn();
     }
     else
     {
-        // Fallback if we can't get GameMode - update directly
-        UE_LOG(LogTemp, Warning, TEXT("GameMode not found, calling GameInstance->SwitchTurn() directly"));
         GameInstance->SwitchTurn();
     }
 }
 
+// Shows or hides the end turn button based on game state
 void ASaT_HumanPlayer::ShowEndTurnButton()
 {
     // Only show the End Turn button in the PLAYING phase and when it's the player's turn
@@ -1034,15 +945,9 @@ void ASaT_HumanPlayer::ShowEndTurnButton()
                 EndTurnWidget->RemoveFromParent();
                 EndTurnWidget = nullptr;
             }
-            UE_LOG(LogTemp, Warning, TEXT("End Turn button not shown: Phase = %s, IsPlayerTurn = %s"),
-                CurrentGamePhase == EGamePhase::SETUP ? TEXT("SETUP") :
-                CurrentGamePhase == EGamePhase::PLAYING ? TEXT("PLAYING") : TEXT("GAMEOVER"),
-                bIsPlayerTurn ? TEXT("TRUE") : TEXT("FALSE"));
             return;
         }
     }
-
-    UE_LOG(LogTemp, Warning, TEXT("ShowEndTurnButton called"));
 
     // Get player controller
     APlayerController* PC = GetWorld()->GetFirstPlayerController();
@@ -1052,7 +957,7 @@ void ASaT_HumanPlayer::ShowEndTurnButton()
         return;
     }
 
-    // Create fresh widget
+    // Create widget
     if (EndTurnWidget)
     {
         EndTurnWidget->RemoveFromParent();
@@ -1066,7 +971,6 @@ void ASaT_HumanPlayer::ShowEndTurnButton()
         EndTurnWidget->SetVisibility(ESlateVisibility::Visible);
         EndTurnWidget->SetIsEnabled(true);
 
-        // Add to viewport with high Z-order - DO THIS ONLY ONCE
         EndTurnWidget->AddToViewport(10000);
 
         UButton* EndTurnBtn = Cast<UButton>(EndTurnWidget->GetWidgetFromName(TEXT("EndTurnButton")));
@@ -1074,21 +978,17 @@ void ASaT_HumanPlayer::ShowEndTurnButton()
         {
             EndTurnBtn->OnClicked.Clear(); // Clear any existing bindings
             EndTurnBtn->OnClicked.AddDynamic(this, &ASaT_HumanPlayer::EndTurn);
-            UE_LOG(LogTemp, Warning, TEXT("End Turn Button bound successfully"));
         }
         else
         {
             UE_LOG(LogTemp, Error, TEXT("Failed to find EndTurnButton in widget!"));
         }
 
-        // IMPORTANT: Use GameAndUI mode consistently
         FInputModeGameAndUI InputMode;
         InputMode.SetWidgetToFocus(EndTurnWidget->TakeWidget());
         InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
         PC->SetInputMode(InputMode);
         PC->bShowMouseCursor = true;
-
-        UE_LOG(LogTemp, Warning, TEXT("End Turn widget set up with proper focus"));
     }
     else
     {
@@ -1096,6 +996,124 @@ void ASaT_HumanPlayer::ShowEndTurnButton()
     }
 }
 
+// Shows the movement and attack options widget for the selected unit
+void ASaT_HumanPlayer::ShowMovementAndAttackWidget(AUnit* UnitToShow)
+{
+    // Get player controller
+    APlayerController* PC = GetWorld()->GetFirstPlayerController();
+    if (!PC)
+    {
+        UE_LOG(LogTemp, Error, TEXT("Failed to get PlayerController"));
+        return;
+    }
+
+    // Remove previous widget if it exists
+    if (MovementAndAttackWidget)
+    {
+        MovementAndAttackWidget->RemoveFromParent();
+        MovementAndAttackWidget = nullptr;
+    }
+
+    // Check if class reference is valid
+    if (!MovementAndAttackWidgetClass)
+    {
+        UE_LOG(LogTemp, Error, TEXT("MovementAndAttackWidgetClass is not set! Cannot show widget"));
+        return;
+    }
+
+    // Create widget
+    MovementAndAttackWidget = CreateWidget<UUserWidget>(PC, MovementAndAttackWidgetClass);
+    if (MovementAndAttackWidget)
+    {
+        // Add widget to viewport with high Z-order
+        MovementAndAttackWidget->AddToViewport(10000);
+        UE_LOG(LogTemp, Warning, TEXT("Movement and Attack widget added to viewport"));
+
+        // Find and bind buttons
+        UButton* MoveButton = Cast<UButton>(MovementAndAttackWidget->GetWidgetFromName(TEXT("MoveButton")));
+        UButton* AttackButton = Cast<UButton>(MovementAndAttackWidget->GetWidgetFromName(TEXT("AttackButton")));
+
+        if (MoveButton)
+        {
+            MoveButton->OnClicked.Clear(); // Clear existing bindings
+            MoveButton->OnClicked.AddDynamic(this, &ASaT_HumanPlayer::OnMoveButtonClicked);
+        }
+        else
+        {
+            UE_LOG(LogTemp, Warning, TEXT("MoveButton not found in widget!"));
+        }
+
+        if (AttackButton)
+        {
+            AttackButton->OnClicked.Clear(); // Clear existing bindings
+            AttackButton->OnClicked.AddDynamic(this, &ASaT_HumanPlayer::OnAttackButtonClicked);
+        }
+        else
+        {
+            UE_LOG(LogTemp, Warning, TEXT("AttackButton not found in widget!"));
+        }
+
+        FInputModeGameAndUI InputMode;
+        InputMode.SetWidgetToFocus(MovementAndAttackWidget->TakeWidget());
+        InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+        PC->SetInputMode(InputMode);
+        PC->bShowMouseCursor = true;
+    }
+    else
+    {
+        UE_LOG(LogTemp, Error, TEXT("Failed to create MovementAndAttack widget!"));
+    }
+}
+
+// Handler for when the Move button is clicked - shows movement range
+void ASaT_HumanPlayer::OnMoveButtonClicked()
+{
+    // Clear previous highlights
+    ClearAllHighlightsAndPaths();
+
+    // Set flags
+    bMoveMode = true;
+    bAttackMode = false;
+
+    // Show movement range
+    if (SelectedUnit)
+    {
+        ShowMovementRange(SelectedUnit);
+    }
+
+    // Hide widget after selection
+    if (MovementAndAttackWidget)
+    {
+        MovementAndAttackWidget->RemoveFromParent();
+        MovementAndAttackWidget = nullptr;
+    }
+}
+
+// Handler for when the Attack button is clicked - shows attack range
+void ASaT_HumanPlayer::OnAttackButtonClicked()
+{
+    // Clear previous highlights
+    ClearAllHighlightsAndPaths();
+
+    // Set flags
+    bMoveMode = false;
+    bAttackMode = true;
+
+    // Show attack range
+    if (SelectedUnit)
+    {
+        ShowAttackRange(SelectedUnit);
+    }
+
+    // Hide widget after selection
+    if (MovementAndAttackWidget)
+    {
+        MovementAndAttackWidget->RemoveFromParent();
+        MovementAndAttackWidget = nullptr;
+    }
+}
+
+// Calculates and highlights the valid movement range for a unit
 void ASaT_HumanPlayer::ShowMovementRange(AUnit * Unit)
 {
     if (!Unit || !GridManager)
@@ -1111,9 +1129,6 @@ void ASaT_HumanPlayer::ShowMovementRange(AUnit * Unit)
     int32 UnitY = Unit->GridY;
     int32 MovementRange = Unit->Movement;
 
-    UE_LOG(LogTemp, Warning, TEXT("Showing movement range for unit at (%d, %d) with range %d"),
-        UnitX, UnitY, MovementRange);
-
     // Dijkstra's algorithm for finding reachable tiles
     // Initialize distance array (distance from start position)
     int32 Distance[25][25];
@@ -1128,7 +1143,7 @@ void ASaT_HumanPlayer::ShowMovementRange(AUnit * Unit)
     // Start position has distance 0
     Distance[UnitX][UnitY] = 0;
 
-    // Priority queue for Dijkstra (using array as simple implementation)
+    // Priority queue for Dijkstra
     TArray<TPair<int32, FVector2D>> Queue;
     Queue.Add(TPair<int32, FVector2D>(0, FVector2D(UnitX, UnitY)));
 
@@ -1201,15 +1216,12 @@ void ASaT_HumanPlayer::ShowMovementRange(AUnit * Unit)
             {
                 GridManager->HighlightCell(x, y, true);
                 HighlightCount++;
-                UE_LOG(LogTemp, Display, TEXT("Highlighting reachable cell at (%d, %d), distance: %d"),
-                    x, y, Distance[x][y]);
             }
         }
     }
-
-    UE_LOG(LogTemp, Warning, TEXT("Highlighted %d cells within movement range"), HighlightCount);
 }
 
+// Attempts to move a unit to the specified grid location
 bool ASaT_HumanPlayer::TryMoveUnit(AUnit* Unit, int32 TargetGridX, int32 TargetGridY)
 {
     if (!Unit || !GridManager)
@@ -1229,6 +1241,7 @@ bool ASaT_HumanPlayer::TryMoveUnit(AUnit* Unit, int32 TargetGridX, int32 TargetG
     return false;
 }
 
+// Calculates the optimal path between two grid positions
 void ASaT_HumanPlayer::CalculatePath(int32 StartX, int32 StartY, int32 EndX, int32 EndY)
 {
     // Clear existing path
@@ -1239,9 +1252,6 @@ void ASaT_HumanPlayer::CalculatePath(int32 StartX, int32 StartY, int32 EndX, int
         UE_LOG(LogTemp, Error, TEXT("GridManager is NULL in CalculatePath"));
         return;
     }
-
-    UE_LOG(LogTemp, Warning, TEXT("Calculating path from (%d,%d) to (%d,%d)"),
-        StartX, StartY, EndX, EndY);
 
     // Check if destination is valid
     if (!GridManager->IsValidPosition(FVector2D(EndX, EndY)))
@@ -1279,7 +1289,7 @@ void ASaT_HumanPlayer::CalculatePath(int32 StartX, int32 StartY, int32 EndX, int
     // Start position has distance 0
     Distance[StartX][StartY] = 0;
 
-    // Direction vectors for 4-way movement (NESW)
+    // Direction vectors for 4-way movement
     int32 dx[] = { 0, 1, 0, -1 };
     int32 dy[] = { -1, 0, 1, 0 };
 
@@ -1347,8 +1357,6 @@ void ASaT_HumanPlayer::CalculatePath(int32 StartX, int32 StartY, int32 EndX, int
     // Check if we found a path to the destination
     if (Distance[EndX][EndY] == INT_MAX)
     {
-        UE_LOG(LogTemp, Warning, TEXT("No path found to destination"));
-
         // Add start point for fallback visualization
         CurrentPath.Add(FVector2D(StartX, StartY));
         return;
@@ -1383,12 +1391,10 @@ void ASaT_HumanPlayer::CalculatePath(int32 StartX, int32 StartY, int32 EndX, int
     if (CurrentPath.Num() > 0 && GridManager)
     {
         GridManager->HighlightPath(CurrentPath, true);
-        UE_LOG(LogTemp, Warning, TEXT("Found path with %d steps"), CurrentPath.Num());
     }
-
-    UE_LOG(LogTemp, Warning, TEXT("Path calculation complete - Found %d points in path"), CurrentPath.Num());
 }
 
+// Clears the current path highlighting
 void ASaT_HumanPlayer::ClearPath()
 {
     CurrentPath.Empty();
@@ -1399,6 +1405,7 @@ void ASaT_HumanPlayer::ClearPath()
     }
 }
 
+// Removes all highlights and path visualizations from the grid
 void ASaT_HumanPlayer::ClearAllHighlightsAndPaths()
 {
     if (GridManager)
@@ -1411,11 +1418,10 @@ void ASaT_HumanPlayer::ClearAllHighlightsAndPaths()
 
         // Also clear our path tracking array
         CurrentPath.Empty();
-
-        UE_LOG(LogTemp, Warning, TEXT("All highlights and paths cleared"));
     }
 }
 
+// Calculates and highlights valid attack targets for a unit
 void ASaT_HumanPlayer::ShowAttackRange(AUnit* Unit)
 {
     if (!Unit || !GridManager)
@@ -1423,16 +1429,12 @@ void ASaT_HumanPlayer::ShowAttackRange(AUnit* Unit)
         return;
     }
 
-    // Clear existing movement highlights, but keep any path highlights
     GridManager->ClearAllHighlights();
 
     // Get the unit's current position and attack range
     int32 UnitX = Unit->GridX;
     int32 UnitY = Unit->GridY;
     int32 AttackRange = Unit->RangeAttack;
-
-    UE_LOG(LogTemp, Warning, TEXT("Showing attack range for unit at (%d, %d) with range %d"),
-        UnitX, UnitY, AttackRange);
 
     // For Sniper (long range attack), show all cells within range
     // For Brawler (close combat), only show adjacent cells
@@ -1478,8 +1480,6 @@ void ASaT_HumanPlayer::ShowAttackRange(AUnit* Unit)
                     AUnit* TargetUnit = FindUnitAtPosition(X, Y);
                     if (TargetUnit && !TargetUnit->bIsPlayerUnit)
                     {
-                        // Highlight with a different color for enemy units in range
-                        // For simplicity, use the path highlight color (usually red/yellow)
                         GridManager->HighlightCell(X, Y, true);
                         HighlightedCount++;
                     }
@@ -1487,10 +1487,9 @@ void ASaT_HumanPlayer::ShowAttackRange(AUnit* Unit)
             }
         }
     }
-
-    UE_LOG(LogTemp, Warning, TEXT("Attack range visualization complete: %d cells highlighted"), HighlightedCount);
 }
 
+// Attempts to attack a target unit and processes the results
 bool ASaT_HumanPlayer::TryAttackUnit(AUnit* AttackingUnit, AUnit* TargetUnit)
 {
     if (!AttackingUnit || !TargetUnit || !GridManager)
@@ -1525,7 +1524,6 @@ bool ASaT_HumanPlayer::TryAttackUnit(AUnit* AttackingUnit, AUnit* TargetUnit)
 
         if (bAttackSuccess)
         {
-            // IMPORTANT: Mark the unit as having attacked this turn - this was missing!
             AttackingUnit->bHasAttackedThisTurn = true;
 
             // Calculate damage dealt
@@ -1558,6 +1556,7 @@ bool ASaT_HumanPlayer::TryAttackUnit(AUnit* AttackingUnit, AUnit* TargetUnit)
     return false;
 }
 
+// Helper method to find a unit at the specified grid coordinates
 AUnit* ASaT_HumanPlayer::FindUnitAtPosition(int32 GridX, int32 GridY)
 {
     // Check if the GridManager is valid
@@ -1588,123 +1587,3 @@ AUnit* ASaT_HumanPlayer::FindUnitAtPosition(int32 GridX, int32 GridY)
     return nullptr;
 }
 
-void ASaT_HumanPlayer::ShowMovementAndAttackWidget(AUnit* UnitToShow)
-{
-    // Get player controller
-    APlayerController* PC = GetWorld()->GetFirstPlayerController();
-    if (!PC)
-    {
-        UE_LOG(LogTemp, Error, TEXT("Failed to get PlayerController"));
-        return;
-    }
-
-    // Remove previous widget if it exists
-    if (MovementAndAttackWidget)
-    {
-        MovementAndAttackWidget->RemoveFromParent();
-        MovementAndAttackWidget = nullptr;
-    }
-
-    // Check if class reference is valid
-    if (!MovementAndAttackWidgetClass)
-    {
-        UE_LOG(LogTemp, Error, TEXT("MovementAndAttackWidgetClass is not set! Cannot show widget"));
-        return;
-    }
-
-    // Create widget
-    MovementAndAttackWidget = CreateWidget<UUserWidget>(PC, MovementAndAttackWidgetClass);
-    if (MovementAndAttackWidget)
-    {
-        // Add widget to viewport with high Z-order
-        MovementAndAttackWidget->AddToViewport(10000);
-        UE_LOG(LogTemp, Warning, TEXT("Movement and Attack widget added to viewport"));
-
-        // Find and bind buttons
-        UButton* MoveButton = Cast<UButton>(MovementAndAttackWidget->GetWidgetFromName(TEXT("MoveButton")));
-        UButton* AttackButton = Cast<UButton>(MovementAndAttackWidget->GetWidgetFromName(TEXT("AttackButton")));
-
-        if (MoveButton)
-        {
-            MoveButton->OnClicked.Clear(); // Clear existing bindings
-            MoveButton->OnClicked.AddDynamic(this, &ASaT_HumanPlayer::OnMoveButtonClicked);
-            UE_LOG(LogTemp, Display, TEXT("Move button bound successfully"));
-        }
-        else
-        {
-            UE_LOG(LogTemp, Warning, TEXT("MoveButton not found in widget!"));
-        }
-
-        if (AttackButton)
-        {
-            AttackButton->OnClicked.Clear(); // Clear existing bindings
-            AttackButton->OnClicked.AddDynamic(this, &ASaT_HumanPlayer::OnAttackButtonClicked);
-            UE_LOG(LogTemp, Display, TEXT("Attack button bound successfully"));
-        }
-        else
-        {
-            UE_LOG(LogTemp, Warning, TEXT("AttackButton not found in widget!"));
-        }
-
-        // IMPORTANT: Set the input mode with proper focus
-        FInputModeGameAndUI InputMode;
-        InputMode.SetWidgetToFocus(MovementAndAttackWidget->TakeWidget());
-        InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
-        PC->SetInputMode(InputMode);
-        PC->bShowMouseCursor = true;
-
-        UE_LOG(LogTemp, Warning, TEXT("Movement and Attack widget set up with proper focus"));
-    }
-    else
-    {
-        UE_LOG(LogTemp, Error, TEXT("Failed to create MovementAndAttack widget!"));
-    }
-}
-
-void ASaT_HumanPlayer::OnMoveButtonClicked()
-{
-    // Clear previous highlights
-    ClearAllHighlightsAndPaths();
-
-    // Set flags
-    bMoveMode = true;
-    bAttackMode = false;
-
-    // Show movement range
-    if (SelectedUnit)
-    {
-        ShowMovementRange(SelectedUnit);
-        UE_LOG(LogTemp, Warning, TEXT("Move mode activated - showing movement range"));
-    }
-
-    // Hide widget after selection
-    if (MovementAndAttackWidget)
-    {
-        MovementAndAttackWidget->RemoveFromParent();
-        MovementAndAttackWidget = nullptr;
-    }
-}
-
-void ASaT_HumanPlayer::OnAttackButtonClicked()
-{
-    // Clear previous highlights
-    ClearAllHighlightsAndPaths();
-
-    // Set flags
-    bMoveMode = false;
-    bAttackMode = true;
-
-    // Show attack range
-    if (SelectedUnit)
-    {
-        ShowAttackRange(SelectedUnit);
-        UE_LOG(LogTemp, Warning, TEXT("Attack mode activated - showing attack range"));
-    }
-
-    // Hide widget after selection
-    if (MovementAndAttackWidget)
-    {
-        MovementAndAttackWidget->RemoveFromParent();
-        MovementAndAttackWidget = nullptr;
-    }
-}

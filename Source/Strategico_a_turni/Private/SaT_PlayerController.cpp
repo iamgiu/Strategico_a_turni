@@ -3,11 +3,16 @@
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
 
+// Constructor - initializes default values
 ASaT_PlayerController::ASaT_PlayerController()
 {
-    // Costruttore
+    // Constructor implementation
 }
 
+/*
+ * Called when the controller begins play
+ * Sets up input mode and enhanced input system
+ */
 void ASaT_PlayerController::BeginPlay()
 {
     Super::BeginPlay();
@@ -28,7 +33,6 @@ void ASaT_PlayerController::BeginPlay()
         if (SaTContext)
         {
             Subsystem->AddMappingContext(SaTContext, 0);
-            UE_LOG(LogTemp, Warning, TEXT("SaT Input context added successfully"));
         }
         else
         {
@@ -43,6 +47,10 @@ void ASaT_PlayerController::BeginPlay()
     DebugInputState();
 }
 
+/*
+ * Sets up input component bindings
+ * Configures enhanced input actions
+ */
 void ASaT_PlayerController::SetupInputComponent()
 {
     Super::SetupInputComponent();
@@ -56,13 +64,17 @@ void ASaT_PlayerController::SetupInputComponent()
     }
 }
 
+/*
+ * Processes click input on the grid
+ * Includes debouncing to prevent double-clicks
+ * @param Value The input action value
+ */
 void ASaT_PlayerController::ClickOnGrid(const FInputActionValue& Value)
 {
     // Get timestamp to prevent double-processing clicks
     static double LastClickTime = 0.0;
     double CurrentTime = FPlatformTime::Seconds();
 
-    // Ensure we don't process clicks too rapidly (adjust this threshold as needed)
     if (CurrentTime - LastClickTime < 0.25)
     {
         return;
@@ -70,37 +82,31 @@ void ASaT_PlayerController::ClickOnGrid(const FInputActionValue& Value)
 
     LastClickTime = CurrentTime;
 
-    // Ottiene il pawn come SaT_HumanPlayer e chiama OnClick
+    // Get the pawn as SaT_HumanPlayer and call OnClick
     ASaT_HumanPlayer* HumanPlayer = Cast<ASaT_HumanPlayer>(GetPawn());
     if (HumanPlayer)
     {
-        UE_LOG(LogTemp, Warning, TEXT("Processing click at time: %f"), CurrentTime);
         HumanPlayer->OnClick();
     }
 }
 
+/*
+ * Utility to log the current state of the input system
+ * Useful for debugging input configuration issues
+ */
 void ASaT_PlayerController::DebugInputState()
 {
-    UE_LOG(LogTemp, Warning, TEXT("===== INPUT DEBUG ====="));
-    UE_LOG(LogTemp, Warning, TEXT("MouseVisible: %s"), bShowMouseCursor ? TEXT("TRUE") : TEXT("FALSE"));
-
     if (UEnhancedInputLocalPlayerSubsystem* Subsystem = ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(GetLocalPlayer()))
     {
-        UE_LOG(LogTemp, Warning, TEXT("Enhanced Input Subsystem found"));
-
         if (SaTContext)
         {
-            UE_LOG(LogTemp, Warning, TEXT("SaTContext is valid"));
-
-            // Simple check without using potentially unsupported methods
+            // Simple check
             bool bHasContext = false;
 
             // Try-catch to avoid any runtime errors
             try
             {
                 bHasContext = Subsystem->HasMappingContext(SaTContext);
-                UE_LOG(LogTemp, Warning, TEXT("SaTContext is %s"),
-                    bHasContext ? TEXT("applied") : TEXT("NOT applied"));
             }
             catch (...)
             {
@@ -116,6 +122,4 @@ void ASaT_PlayerController::DebugInputState()
     {
         UE_LOG(LogTemp, Error, TEXT("Enhanced Input Subsystem NOT found!"));
     }
-
-    UE_LOG(LogTemp, Warning, TEXT("======================="));
 }

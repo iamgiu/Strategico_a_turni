@@ -9,13 +9,11 @@
 #include "UObject/ConstructorHelpers.h"
 #include "SaT_GameMode.h"
 
-// Sets default values
+// Constructor - initializes default values and unit class references
 ASaT_RandomPlayer::ASaT_RandomPlayer()
 {
-    // Set this pawn to call Tick() every frame.  You can turn this off to improve performance if you don't need it.
     PrimaryActorTick.bCanEverTick = true;
 
-    // Adding hard-coded defaults for classes - these will be overridden by BP values if set
     static ConstructorHelpers::FClassFinder<ASniper> DefaultSniperClass(TEXT("/Game/Blueprints/BP_Sniper"));
     if (DefaultSniperClass.Succeeded())
     {
@@ -29,7 +27,7 @@ ASaT_RandomPlayer::ASaT_RandomPlayer()
     }
 }
 
-// Called when the game starts or when spawned
+// Called when the game starts - initializes player state and references
 void ASaT_RandomPlayer::BeginPlay()
 {
     Super::BeginPlay();
@@ -68,15 +66,18 @@ void ASaT_RandomPlayer::BeginPlay()
     }
 }
 
-// Called every frame
+//  Called every frame to update AI state
 void ASaT_RandomPlayer::Tick(float DeltaTime)
 {
     Super::Tick(DeltaTime);
 }
 
+/*
+ * Called when it's the AI's turn - processes AI decision making
+ * Handles both SETUP and PLAYING phases
+ */
 void ASaT_RandomPlayer::OnTurn()
 {
-    UE_LOG(LogTemp, Warning, TEXT("AI Turn Started - Attempting to show thinking widget"));
     AGameModeBase* GameModeBase = UGameplayStatics::GetGameMode(GetWorld());
     ASaT_GameMode* GameMode = Cast<ASaT_GameMode>(GameModeBase);
     if (GameMode)
@@ -89,9 +90,6 @@ void ASaT_RandomPlayer::OnTurn()
         UE_LOG(LogTemp, Error, TEXT("Could not find GameMode to show thinking widget"));
     }
 
-    // Debug - identify which Player object this is
-    UE_LOG(LogTemp, Warning, TEXT("OnTurn called on AI Player (this=%p)"), this);
-
     // Get current game state
     if (!GameInstance)
     {
@@ -103,7 +101,7 @@ void ASaT_RandomPlayer::OnTurn()
         }
     }
 
-    // Very important - check if it's really our turn
+    // Check if it's really his turn
     if (GameInstance->bIsPlayerTurn)
     {
         UE_LOG(LogTemp, Error, TEXT("AI: OnTurn called but GameInstance says it's Human's turn! Ignoring."));
@@ -111,25 +109,17 @@ void ASaT_RandomPlayer::OnTurn()
         return;
     }
 
-    UE_LOG(LogTemp, Warning, TEXT("AI Player Turn Started - Verification PASSED"));
-
     // Explicitly set this player's turn flag to true
     IsMyTurn = true;
-    UE_LOG(LogTemp, Warning, TEXT("AI: IsMyTurn set to TRUE"));
 
     // Check the game phase
     EGamePhase CurrentPhase = GameInstance->GetGamePhase();
-    UE_LOG(LogTemp, Warning, TEXT("AI Turn - Current phase: %s"),
-        CurrentPhase == EGamePhase::SETUP ? TEXT("SETUP") :
-        CurrentPhase == EGamePhase::PLAYING ? TEXT("PLAYING") : TEXT("GAMEOVER"));
 
     if (CurrentPhase == EGamePhase::SETUP)
     {
-        // Check if we already placed all units
+        // Check if he already placed all units
         if (PlacedUnitsCount >= 2)
         {
-            UE_LOG(LogTemp, Warning, TEXT("AI: Already placed all units, ending turn"));
-
             // End turn with a slight delay
             FTimerHandle TimerHandle;
             GetWorld()->GetTimerManager().SetTimer(TimerHandle, [this]()
@@ -141,15 +131,11 @@ void ASaT_RandomPlayer::OnTurn()
 
         // In SETUP phase, use a timer for unit placement
         FTimerHandle TimerHandle;
-        UE_LOG(LogTemp, Warning, TEXT("AI: Scheduling unit placement in 1.5 seconds..."));
 
-        GetWorld()->GetTimerManager().SetTimer(TimerHandle, this, &ASaT_RandomPlayer::PlaceRandomUnit, 1.5f, false);
+        GetWorld()->GetTimerManager().SetTimer(TimerHandle, this, &ASaT_RandomPlayer::PlaceRandomUnit, 2.0f, false);
     }
     else if (CurrentPhase == EGamePhase::PLAYING)
     {
-        // NEW FUNCTIONALITY FOR PLAYING PHASE
-        UE_LOG(LogTemp, Warning, TEXT("AI: In PLAYING phase, starting AI actions..."));
-
         // Hide AI thinking widget at end of turn processing
         if (GameMode)
         {
@@ -163,7 +149,6 @@ void ASaT_RandomPlayer::OnTurn()
         if (AIUnits.Num() > 0)
         {
             // Start the sequence of actions for all AI units
-            UE_LOG(LogTemp, Warning, TEXT("AI: Found %d units to control"), AIUnits.Num());
             CurrentUnitIndex = 0;
 
             // Schedule the first unit action
@@ -172,7 +157,6 @@ void ASaT_RandomPlayer::OnTurn()
         }
         else
         {
-            UE_LOG(LogTemp, Warning, TEXT("AI: No units found, ending turn"));
             EndTurn();
         }
     }
@@ -187,41 +171,40 @@ void ASaT_RandomPlayer::OnTurn()
     }
 }
 
+// Ends the AI's turn and passes control back to the player
 void ASaT_RandomPlayer::EndTurn()
 {
-    UE_LOG(LogTemp, Warning, TEXT("AI Player ending turn"));
-
-    // Update the GameInstance with our placed units count
+    // Update the GameInstance with his placed units count
     if (GameInstance)
     {
         GameInstance->AIUnitsPlaced = PlacedUnitsCount;
     }
 
-    // Set our own IsMyTurn to false BEFORE calling GameMode->EndTurn()
+    // Set his own IsMyTurn to false BEFORE calling GameMode->EndTurn()
     IsMyTurn = false;
-    UE_LOG(LogTemp, Warning, TEXT("AI Player setting IsMyTurn to FALSE"));
 
     // Get the game mode and tell it to end the turn
     AGameModeBase* GameModeBase = UGameplayStatics::GetGameMode(GetWorld());
     ASaT_GameMode* GameMode = Cast<ASaT_GameMode>(GameModeBase);
     if (GameMode)
     {
-        UE_LOG(LogTemp, Warning, TEXT("AI Player calling GameMode->EndTurn()"));
         GameMode->EndTurn();
     }
     else if (GameInstance)
     {
-        // Fallback if we can't get GameMode
         UE_LOG(LogTemp, Warning, TEXT("GameMode not found, calling GameInstance->SwitchTurn() directly"));
         GameInstance->SwitchTurn();
     }
 }
 
+/*
+ * Places a random unit during the setup phase
+ * Chooses between Sniper and Brawler based on what's already placed
+ */
 void ASaT_RandomPlayer::PlaceRandomUnit()
 {
     if (!GridManager)
     {
-        UE_LOG(LogTemp, Error, TEXT("GridManager not found in SaT_RandomPlayer"));
         EndTurn();
         return;
     }
@@ -240,7 +223,6 @@ void ASaT_RandomPlayer::PlaceRandomUnit()
         // Check if AI has already placed all units
         if (PlacedUnitsCount >= 2)
         {
-            UE_LOG(LogTemp, Warning, TEXT("AI has already placed all units! Passing turn."));
             EndTurn();
             return;
         }
@@ -251,11 +233,11 @@ void ASaT_RandomPlayer::PlaceRandomUnit()
 
         if (bFoundEmptyCell)
         {
-            // FIXED: Randomly choose between Sniper and Brawler, unless we already placed one
+            // Randomly choose between Sniper and Brawler
             bool bHasPlacedSniper = false;
             bool bHasPlacedBrawler = false;
 
-            // Check which units we've already placed
+            // Check which units already placed
             TArray<AActor*> AllUnits;
             UGameplayStatics::GetAllActorsOfClass(GetWorld(), AUnit::StaticClass(), AllUnits);
 
@@ -278,29 +260,24 @@ void ASaT_RandomPlayer::PlaceRandomUnit()
             // Determine which unit to place
             bool bIsSniper;
 
-            // If we haven't placed either, randomly choose
+            // If he hasn't placed either, randomly choose
             if (!bHasPlacedSniper && !bHasPlacedBrawler)
             {
                 bIsSniper = (FMath::RandBool()); // 50% chance for either
-                UE_LOG(LogTemp, Warning, TEXT("AI: Randomly chose to place %s first"),
-                    bIsSniper ? TEXT("Sniper") : TEXT("Brawler"));
             }
-            // If we've placed Sniper but not Brawler, place Brawler
+            // If he has placed Sniper but not Brawler, place Brawler
             else if (bHasPlacedSniper && !bHasPlacedBrawler)
             {
                 bIsSniper = false;
-                UE_LOG(LogTemp, Warning, TEXT("AI: Already placed Sniper, placing Brawler"));
             }
-            // If we've placed Brawler but not Sniper, place Sniper
+            // If he has placed Brawler but not Sniper, place Sniper
             else if (!bHasPlacedSniper && bHasPlacedBrawler)
             {
                 bIsSniper = true;
-                UE_LOG(LogTemp, Warning, TEXT("AI: Already placed Brawler, placing Sniper"));
             }
             // Just in case both are already placed
             else
             {
-                UE_LOG(LogTemp, Error, TEXT("AI: Both unit types already placed! Should not reach here."));
                 EndTurn();
                 return;
             }
@@ -308,13 +285,11 @@ void ASaT_RandomPlayer::PlaceRandomUnit()
             // Check if class references are valid
             if (bIsSniper && !SniperClass)
             {
-                UE_LOG(LogTemp, Error, TEXT("SniperClass is not set! Cannot place Sniper"));
                 EndTurn();
                 return;
             }
             if (!bIsSniper && !BrawlerClass)
             {
-                UE_LOG(LogTemp, Error, TEXT("BrawlerClass is not set! Cannot place Brawler"));
                 EndTurn();
                 return;
             }
@@ -331,12 +306,10 @@ void ASaT_RandomPlayer::PlaceRandomUnit()
             if (bIsSniper)
             {
                 Unit = GetWorld()->SpawnActor<ASniper>(SniperClass, SpawnLocation, FRotator::ZeroRotator, SpawnParams);
-                UE_LOG(LogTemp, Warning, TEXT("AI: Sniper placed at %d, %d"), GridX, GridY);
             }
             else
             {
                 Unit = GetWorld()->SpawnActor<ABrawler>(BrawlerClass, SpawnLocation, FRotator::ZeroRotator, SpawnParams);
-                UE_LOG(LogTemp, Warning, TEXT("AI: Brawler placed at %d, %d"), GridX, GridY);
             }
 
             // Configure unit
@@ -344,23 +317,19 @@ void ASaT_RandomPlayer::PlaceRandomUnit()
             {
                 Unit->GridX = GridX;
                 Unit->GridY = GridY;
-                Unit->bIsPlayerUnit = false; // EXPLICITLY set as AI unit
-                Unit->UpdateTeamColor();      // Force update team color immediately
-
-                UE_LOG(LogTemp, Warning, TEXT("AI Unit placed - bIsPlayerUnit set to FALSE, calling UpdateTeamColor"));
+                Unit->bIsPlayerUnit = false; 
+                Unit->UpdateTeamColor();     
 
                 // Mark cell as occupied
                 GridManager->OccupyCell(GridX, GridY, Unit);
 
                 // Increment placement count and update GameInstance
                 PlacedUnitsCount++;
-                UE_LOG(LogTemp, Warning, TEXT("AI has placed %d/2 units"), PlacedUnitsCount);
 
                 // Update GameInstance
                 if (GameInstance)
                 {
                     GameInstance->AIUnitsPlaced = PlacedUnitsCount;
-                    UE_LOG(LogTemp, Warning, TEXT("Updated GameInstance AIUnitsPlaced = %d"), GameInstance->AIUnitsPlaced);
                 }
 
                 AGameModeBase* GameModeBase = UGameplayStatics::GetGameMode(GetWorld());
@@ -381,29 +350,31 @@ void ASaT_RandomPlayer::PlaceRandomUnit()
             }
 
             // Always end turn after placing one unit
-            UE_LOG(LogTemp, Warning, TEXT("AI passing turn after unit placement"));
             EndTurn();
         }
         else
         {
-            UE_LOG(LogTemp, Error, TEXT("AI couldn't find an empty cell for unit placement!"));
             EndTurn();
         }
     }
     else if (CurrentPhase == EGamePhase::PLAYING)
     {
-        // PLAYING PHASE LOGIC - This should now be handled in ProcessNextAIUnit
-        UE_LOG(LogTemp, Warning, TEXT("PlaceRandomUnit called in PLAYING phase - this should not happen"));
         EndTurn();
     }
 }
 
+/*
+ * Finds a random empty cell on the grid
+ * @param OutGridX - Output parameter for grid X coordinate
+ * @param OutGridY - Output parameter for grid Y coordinate
+ * @return True if an empty cell was found, false otherwise
+ */
 bool ASaT_RandomPlayer::FindRandomEmptyCell(int32& OutGridX, int32& OutGridY)
 {
     if (!GridManager) return false;
 
     // Grid size
-    int32 GridSize = 25; // This should match the size in GridManager
+    int32 GridSize = 25;
 
     // Maximum number of attempts to find an empty cell
     const int32 MaxAttempts = 100;
@@ -434,7 +405,10 @@ bool ASaT_RandomPlayer::FindRandomEmptyCell(int32& OutGridX, int32& OutGridY)
     return false;
 }
 
-// Find all AI controlled units
+/*
+ * Find all AI controlled units in the world
+ * Populates the AIUnits array with living AI units
+ */
 void ASaT_RandomPlayer::FindAllAIUnits()
 {
     // Get all unit actors in the world
@@ -448,13 +422,14 @@ void ASaT_RandomPlayer::FindAllAIUnits()
         if (Unit && !Unit->bIsPlayerUnit && Unit->IsAlive())
         {
             AIUnits.Add(Unit);
-            UE_LOG(LogTemp, Warning, TEXT("AI: Found unit %s at position (%d,%d)"),
-                *Unit->GetName(), Unit->GridX, Unit->GridY);
         }
     }
 }
 
-// Process the next AI unit in sequence
+/*
+ * Process the next AI unit in sequence
+ * Handles unit actions and schedules the next unit
+ */
 void ASaT_RandomPlayer::ProcessNextAIUnit()
 {
     if (!IsMyTurn)
@@ -468,9 +443,6 @@ void ASaT_RandomPlayer::ProcessNextAIUnit()
         AUnit* CurrentUnit = AIUnits[CurrentUnitIndex];
         if (CurrentUnit && CurrentUnit->IsAlive())
         {
-            UE_LOG(LogTemp, Warning, TEXT("AI: Processing unit %d: %s"),
-                CurrentUnitIndex, *CurrentUnit->GetName());
-
             // Make moves with the current unit
             ProcessUnitActions(CurrentUnit);
         }
@@ -490,12 +462,14 @@ void ASaT_RandomPlayer::ProcessNextAIUnit()
     else
     {
         // All units processed, end turn
-        UE_LOG(LogTemp, Warning, TEXT("AI: All units processed, ending turn"));
         EndTurn();
     }
 }
 
-// Process actions for a specific AI unit
+/*
+ * Process actions for a specific AI unit based on difficulty setting
+ * @param Unit - The AI unit to process actions for
+ */
 void ASaT_RandomPlayer::ProcessUnitActions(AUnit* Unit)
 {
     // Check the current difficulty setting
@@ -511,7 +485,11 @@ void ASaT_RandomPlayer::ProcessUnitActions(AUnit* Unit)
     }
 }
 
-// Process unit actions with random behavior (Easy mode)
+/*
+ * Process unit actions with random behavior (Easy mode)
+ * Randomly decides whether to attack or move first
+ * @param Unit - The AI unit to process actions for
+ */
 void ASaT_RandomPlayer::ProcessUnitActionsRandom(AUnit* Unit)
 {
     if (!Unit || !Unit->IsAlive())
@@ -666,7 +644,11 @@ void ASaT_RandomPlayer::ProcessUnitActionsRandom(AUnit* Unit)
     }
 }
 
-// Find a random attack target within range
+/*
+ * Find a random attack target within range of the AI unit
+ * @param AIUnit - The AI unit to find a target for
+ * @return A player unit that can be attacked, or nullptr if none found
+ */
 AUnit* ASaT_RandomPlayer::FindRandomAttackTarget(AUnit* AIUnit)
 {
     if (!AIUnit) return nullptr;
@@ -691,13 +673,11 @@ AUnit* ASaT_RandomPlayer::FindRandomAttackTarget(AUnit* AIUnit)
             if (Distance <= AIUnit->RangeAttack)
             {
                 PotentialTargets.Add(PlayerUnit);
-                UE_LOG(LogTemp, Warning, TEXT("Easy AI: Found potential target at (%d,%d), distance %d, range %d"),
-                    PlayerUnit->GridX, PlayerUnit->GridY, Distance, AIUnit->RangeAttack);
             }
         }
     }
 
-    // If we have targets, select a random one
+    // If he has targets, select a random one
     if (PotentialTargets.Num() > 0)
     {
         int32 RandomIndex = FMath::RandRange(0, PotentialTargets.Num() - 1);
@@ -707,7 +687,12 @@ AUnit* ASaT_RandomPlayer::FindRandomAttackTarget(AUnit* AIUnit)
     return nullptr;
 }
 
-// Move the unit to a random valid position
+/*
+ * Moves the AI unit to a random valid position within its movement range
+ * Validates path clearance and selects a random destination from available options
+ * @param Unit - The AI unit to move
+ * @return True if unit was moved successfully, false otherwise
+ */
 bool ASaT_RandomPlayer::MoveRandomly(AUnit* Unit)
 {
     if (!Unit || !GridManager)
@@ -820,7 +805,16 @@ bool ASaT_RandomPlayer::MoveRandomly(AUnit* Unit)
     return true;
 }
 
-// Helper method to validate the entire path
+
+/*
+ * Validates that a path between two grid positions is clear of obstacles
+ * Checks both horizontal and vertical movement segments separately
+ * @param StartX - Starting X coordinate
+ * @param StartY - Starting Y coordinate
+ * @param EndX - Destination X coordinate
+ * @param EndY - Destination Y coordinate
+ * @return True if the path is clear, false if any cell is occupied
+ */
 bool ASaT_RandomPlayer::IsPathClear(int32 StartX, int32 StartY, int32 EndX, int32 EndY)
 {
     // Determine movement direction
@@ -865,6 +859,10 @@ bool ASaT_RandomPlayer::IsPathClear(int32 StartX, int32 StartY, int32 EndX, int3
     return true;
 }
 
+/*
+ * Processes unit actions using strategic AI behavior (Hard mode)
+ * Prioritizes attacking without moving, then moving toward player units
+ */
 void ASaT_RandomPlayer::ProcessUnitActionsStrategic(AUnit* Unit)
 {
     if (!Unit || !Unit->IsAlive())
@@ -873,13 +871,10 @@ void ASaT_RandomPlayer::ProcessUnitActionsStrategic(AUnit* Unit)
         return;
     }
 
-    UE_LOG(LogTemp, Warning, TEXT("AI: Processing strategic move for %s with Movement=%d, RangeAttack=%d"),
-        *Unit->GetName(), Unit->Movement, Unit->RangeAttack);
-
     // First try to attack without moving
     AUnit* TargetWithoutMoving = FindAttackTarget(Unit);
 
-    // If we can attack now, do it
+    // If he can attack now, do it
     if (TargetWithoutMoving && !Unit->bHasAttackedThisTurn)
     {
         // Get target's HP before attack
@@ -907,13 +902,13 @@ void ASaT_RandomPlayer::ProcessUnitActionsStrategic(AUnit* Unit)
             );
         }
     }
-    // If we can't attack now but haven't moved yet, move strategically toward a player unit
+    // If he can't attack now but hasn't moved yet, move strategically toward a player unit
     else if (!Unit->bHasMovedThisTurn)
     {
         // Use A* pathing to move toward a player unit
         MoveTowardPlayerUnit(Unit);
 
-        // After moving, check if we can attack
+        // After moving, check if he can attack
         if (!Unit->bHasAttackedThisTurn)
         {
             // Try to find a new target after moving
@@ -949,14 +944,24 @@ void ASaT_RandomPlayer::ProcessUnitActionsStrategic(AUnit* Unit)
     }
 }
 
-// Calculate Manhattan distance between two points
+/*
+ * Calculates Manhattan distance between two grid positions
+ * @param A - First position
+ * @param B - Second position
+ * @return Integer distance value
+ */
 int32 ASaT_RandomPlayer::ManhattanDistance(const FVector2D& A, const FVector2D& B)
 {
     return FMath::Abs(FMath::FloorToInt(A.X) - FMath::FloorToInt(B.X)) +
         FMath::Abs(FMath::FloorToInt(A.Y) - FMath::FloorToInt(B.Y));
 }
 
-// Find a player unit to attack if any are in range
+/*
+ * Finds a player unit to attack within range of the AI unit
+ * Prioritizes the weakest (lowest HP) player unit available
+ * @param AIUnit - The AI unit looking for a target
+ * @return Pointer to target unit, or nullptr if no valid targets found
+ */
 AUnit* ASaT_RandomPlayer::FindAttackTarget(AUnit* AIUnit)
 {
     if (!AIUnit) return nullptr;
@@ -981,13 +986,11 @@ AUnit* ASaT_RandomPlayer::FindAttackTarget(AUnit* AIUnit)
             if (Distance <= AIUnit->RangeAttack)
             {
                 PotentialTargets.Add(PlayerUnit);
-                UE_LOG(LogTemp, Warning, TEXT("AI: Found potential target at (%d,%d), HP: %d, distance: %d"),
-                    PlayerUnit->GridX, PlayerUnit->GridY, PlayerUnit->Hp, Distance);
             }
         }
     }
 
-    // If we have targets, prioritize the weakest one
+    // If he has targets, prioritize the weakest one
     if (PotentialTargets.Num() > 0)
     {
         // Sort by HP (weakest first)
@@ -1002,7 +1005,12 @@ AUnit* ASaT_RandomPlayer::FindAttackTarget(AUnit* AIUnit)
     return nullptr;
 }
 
-// Find the closest player unit to the given AI unit
+/*
+ * Finds the closest player unit to the given AI unit
+ * Searches all player units and returns the one with the shortest Manhattan distance
+ * @param AIUnit - The AI unit to calculate distances from
+ * @return Pointer to the closest player unit, or nullptr if none found
+ */
 AUnit* ASaT_RandomPlayer::FindClosestPlayerUnit(AUnit* AIUnit)
 {
     if (!AIUnit) return nullptr;
@@ -1034,7 +1042,11 @@ AUnit* ASaT_RandomPlayer::FindClosestPlayerUnit(AUnit* AIUnit)
     return ClosestUnit;
 }
 
-// Move the AI unit toward the closest player unit using A* pathfinding
+/*
+ * Moves the AI unit toward the closest player unit using A* pathfinding
+ * Calculates the optimal path within the unit's movement range
+ * @param AIUnit - The AI unit to move
+ */
 void ASaT_RandomPlayer::MoveTowardPlayerUnit(AUnit* AIUnit)
 {
     if (!AIUnit || !GridManager) return;
@@ -1043,7 +1055,6 @@ void ASaT_RandomPlayer::MoveTowardPlayerUnit(AUnit* AIUnit)
     AUnit* ClosestUnit = FindClosestPlayerUnit(AIUnit);
     if (!ClosestUnit)
     {
-        UE_LOG(LogTemp, Warning, TEXT("AI: No player units found to move toward"));
         return;
     }
 
@@ -1095,7 +1106,7 @@ void ASaT_RandomPlayer::MoveTowardPlayerUnit(AUnit* AIUnit)
             }
         }
 
-        // Check if we've reached the target
+        // Check if he has reached the target
         if (Current.Equals(Target))
         {
             bFoundPath = true;
@@ -1110,7 +1121,7 @@ void ASaT_RandomPlayer::MoveTowardPlayerUnit(AUnit* AIUnit)
         // Get current G score
         int32 CurrentG = GScore[Current];
 
-        // Stop expanding if we've reached our movement limit
+        // Stop expanding if he has reached his movement limit
         if (CurrentG >= MovementRange)
             continue;
 
@@ -1137,7 +1148,7 @@ void ASaT_RandomPlayer::MoveTowardPlayerUnit(AUnit* AIUnit)
             // Calculate new G score (one more move)
             int32 TentativeG = CurrentG + 1;
 
-            // If we haven't seen this neighbor yet or found a better path
+            // If he hasn't seen this neighbor yet or found a better path
             if (!GScore.Contains(Neighbor) || TentativeG < GScore[Neighbor])
             {
                 // Record this path
@@ -1145,7 +1156,7 @@ void ASaT_RandomPlayer::MoveTowardPlayerUnit(AUnit* AIUnit)
                 GScore.Add(Neighbor, TentativeG);
                 FScore.Add(Neighbor, TentativeG + ManhattanDistance(Neighbor, Target));
 
-                // If this move is better than our current best and within movement range
+                // If this move is better than his current best and within movement range
                 if (TentativeG <= MovementRange &&
                     ManhattanDistance(Neighbor, Target) < BestDistanceToTarget)
                 {
@@ -1181,10 +1192,6 @@ void ASaT_RandomPlayer::MoveTowardPlayerUnit(AUnit* AIUnit)
         Current = CameFrom[Current];
     }
     Path.Insert(Start, 0);
-
-    // Move the unit to the best position found
-    UE_LOG(LogTemp, Warning, TEXT("AI: Moving unit from (%d,%d) to (%d,%d)"),
-        AIUnit->GridX, AIUnit->GridY, FMath::FloorToInt(BestMove.X), FMath::FloorToInt(BestMove.Y));
 
     // Store old position for logging
     int32 OldX = AIUnit->GridX;
@@ -1223,7 +1230,14 @@ void ASaT_RandomPlayer::MoveTowardPlayerUnit(AUnit* AIUnit)
     }
 }
 
-// Helper function to reconstruct a path from A* search and get the best move within range
+/*
+ * Reconstructs a path from A* search results and determines the best move within range
+ * @param CameFrom - Map storing the path connections
+ * @param Current - Current end position being reconstructed
+ * @param Start - Starting position of the unit
+ * @param MaxSteps - Maximum number of steps the unit can take
+ * @return The best grid position to move to within the movement range
+ */
 FVector2D ASaT_RandomPlayer::ReconstructPath(const TMap<FVector2D, FVector2D>& CameFrom,
     FVector2D Current, FVector2D Start, int32 MaxSteps)
 {
@@ -1240,7 +1254,7 @@ FVector2D ASaT_RandomPlayer::ReconstructPath(const TMap<FVector2D, FVector2D>& C
     // Reverse the path and find the last step within range
     if (Path.Num() <= MaxSteps + 1)
     {
-        // We can reach the end of the path, so return the last non-start point
+        // He can reach the end of the path, so return the last non-start point
         for (int32 i = Path.Num() - 1; i >= 0; i--)
         {
             if (!Path[i].Equals(Start))
@@ -1251,24 +1265,26 @@ FVector2D ASaT_RandomPlayer::ReconstructPath(const TMap<FVector2D, FVector2D>& C
     }
     else
     {
-        // We can only go MaxSteps steps, so return the MaxSteps-th position from the end
+        // He can only go MaxSteps steps, so return the MaxSteps-th position from the end
         return Path[Path.Num() - 1 - MaxSteps];
     }
 
-    // Fallback - return starting position if no valid move found
     return Start;
 }
 
+// Called when the AI player wins the game
 void ASaT_RandomPlayer::OnWin()
 {
     UE_LOG(LogTemp, Warning, TEXT("AI Player has won!"));
 }
 
+// Called when the AI player loses the game
 void ASaT_RandomPlayer::OnLose()
 {
     UE_LOG(LogTemp, Warning, TEXT("AI Player has lost!"));
 }
 
+// Called when the game ends in a draw
 void ASaT_RandomPlayer::OnDraw()
 {
     UE_LOG(LogTemp, Warning, TEXT("AI Player: Game ended in a draw"));

@@ -22,73 +22,124 @@ class STRATEGICO_A_TURNI_API ASaT_HumanPlayer : public APawn, public ISaT_Player
     GENERATED_BODY()
 
 public:
+
+    // Constructor 
     ASaT_HumanPlayer();
+
+    // -----------------
+    // Components
+    // -----------------
 
     // Scene root component
     UPROPERTY(VisibleDefaultsOnly, Category = "Components")
     USceneComponent* DefaultSceneRoot;
 
-    // Camera attaccata al giocatore
+    // Camera attached to player
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera")
     UCameraComponent* Camera;
 
+    // -----------------
+    // Core Game Functions
+    // -----------------
+
+    // Called every frame
+    virtual void Tick(float DeltaTime) override;
+
+    // Configure input
+    virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;
+
+    // Interface methods
+    virtual void OnTurn() override;
+    virtual void OnWin() override;
+    virtual void OnLose() override;
+    virtual void OnDraw() override;
+
+    // -----------------
+    // Units Configuration
+    // -----------------
+
+    // Unit class references
     UPROPERTY(EditDefaultsOnly, Category = "Units")
     TSubclassOf<class ASniper> SniperClass;
 
     UPROPERTY(EditDefaultsOnly, Category = "Units")
     TSubclassOf<class ABrawler> BrawlerClass;
 
-    // Chiamato ogni frame
-    virtual void Tick(float DeltaTime) override;
-
-    // Configura l'input
-    virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;
-
-    // Metodi di interfaccia
-    virtual void OnTurn() override;
-    virtual void OnWin() override;
-    virtual void OnLose() override;
-    virtual void OnDraw() override;
-
-    // Gestisce i click del mouse
-    UFUNCTION(BlueprintCallable, Category = "Input")
-    void OnClick();
-
-    // Piazza una nuova unità sulla griglia
+    // Place a new unit on the grid
     UFUNCTION(BlueprintCallable, Category = "Gameplay")
     void PlaceUnit(int32 GridX, int32 GridY, bool bIsSniper);
 
-    // Setter per GridManager
-    UFUNCTION(BlueprintCallable, Category = "Setup")
-    void SetGridManager(AGridManager* InGridManager) { GridManager = InGridManager; }
+    // Track how many units the player has placed
+    UPROPERTY(BlueprintReadWrite, Category = "Game")
+    int32 PlacedUnitsCount;
 
-    // Setter per CurrentPhase
-    UFUNCTION(BlueprintCallable, Category = "Setup")
-    void SetCurrentPhase(EGamePhase InPhase) { CurrentPhase = InPhase; }
+    // Number of units to place
+    UPROPERTY(BlueprintReadOnly, Category = "Gameplay")
+    int32 UnitsToPlace;
 
-    // Setter per UnitsToPlace
-    UFUNCTION(BlueprintCallable, Category = "Setup")
-    void SetUnitsToPlace(int32 InUnitsToPlace) { UnitsToPlace = InUnitsToPlace; }
+    // Function to check if player has placed enough units
+    bool HasPlacedAllUnits() const;
 
+    // Unit placement tracking flags
+    bool bHasPlacedSniper;
+    bool bHasPlacedBrawler;
+
+    // -----------------
+    // Input Handling
+    // -----------------
+
+    // Handle mouse clicks
+    UFUNCTION(BlueprintCallable, Category = "Input")
+    void OnClick();
+
+    // Helper method to handle clicks during the playing phase
+    void HandlePlayingPhaseClick(ATile* ClickedTile);
+
+    // -----------------
+    // Player State
+    // -----------------
+
+    // Current game phase
+    UPROPERTY(BlueprintReadOnly, Category = "Gameplay")
+    EGamePhase CurrentPhase;
+
+    // Turn status tracking
+    UPROPERTY(BlueprintReadOnly, Category = "Gameplay")
+    bool IsMyTurn;
+
+    // -----------------
+    // Unit Selection
+    // -----------------
+
+    // Currently selected unit
+    UPROPERTY()
+    AUnit* SelectedUnit;
+
+    UFUNCTION(BlueprintCallable, Category = "Unit Selection")
+    void DeselectCurrentUnit();
+
+    // Unit selection widget class
     UPROPERTY(EditDefaultsOnly, Category = "UI")
     TSubclassOf<UUserWidget> UnitSelectionWidgetClass;
 
+    // Reference to unit selection widget instance
     UPROPERTY()
     UUserWidget* UnitSelectionWidget;
 
+    // Show unit selection widget
+    UFUNCTION(BlueprintCallable, Category = "Unit Selection")
+    void ShowUnitSelectionWidget();
+
+    // Unit selection handlers
     UFUNCTION(BlueprintCallable, Category = "Unit Selection")
     void OnUnitWidgetSniperSelected();
 
     UFUNCTION(BlueprintCallable, Category = "Unit Selection")
     void OnUnitWidgetBrawlerSelected();
 
-    // Aggiungere questa nuova funzione
-    UFUNCTION(BlueprintCallable, Category = "Unit Selection")
-    void ShowUnitSelectionWidget();
-
-    // Track how many units the player has placed
-    UPROPERTY(BlueprintReadWrite, Category = "Game")
-    int32 PlacedUnitsCount;
+    // -----------------
+    // UI Elements
+    // -----------------
 
     // Reference to the EndTurnButton widget
     UPROPERTY(BlueprintReadWrite, Category = "UI")
@@ -102,28 +153,8 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Game")
     void EndTurn();
 
-    // Function to check if player has placed enough units
-    bool HasPlacedAllUnits() const;
-
     // Show/hide end turn button
     void ShowEndTurnButton();
-
-    USaT_GameInstance* GameInstance;
-
-    // Currently selected unit
-    UPROPERTY()
-    AUnit* SelectedUnit;
-
-    // Shows the possible movement range for a unit
-    void ShowMovementRange(AUnit* Unit);
-
-    // Try to move a unit to the specified grid location
-    bool TryMoveUnit(AUnit* Unit, int32 TargetGridX, int32 TargetGridY);
-
-    void CalculatePath(int32 StartX, int32 StartY, int32 EndX, int32 EndY);
-    void ClearPath();
-
-    void ClearAllHighlightsAndPaths();
 
     // Reference to the Movement and Attack widget class
     UPROPERTY(EditDefaultsOnly, Category = "UI")
@@ -144,6 +175,10 @@ public:
     UFUNCTION(BlueprintCallable, Category = "UI")
     void OnAttackButtonClicked();
 
+    // -----------------
+    // Movement & Combat
+    // -----------------
+
     // Selection mode tracking
     UPROPERTY()
     bool bMoveMode;
@@ -151,9 +186,28 @@ public:
     UPROPERTY()
     bool bAttackMode;
 
+    // Shows the possible movement range for a unit
+    void ShowMovementRange(AUnit* Unit);
+
+    // Try to move a unit to the specified grid location
+    bool TryMoveUnit(AUnit* Unit, int32 TargetGridX, int32 TargetGridY);
+
+    // Path calculation functions
+    void CalculatePath(int32 StartX, int32 StartY, int32 EndX, int32 EndY);
+    void ClearPath();
+
+    // Clear all highlights and paths
+    void ClearAllHighlightsAndPaths();
+
+    // Path tracking
+    UPROPERTY()
+    TArray<FVector2D> CurrentPath;
+
+    // Track units that have attacked this turn
     UPROPERTY()
     TMap<AUnit*, bool> UnitAttackedThisTurn;
 
+    // Show attack range for a unit
     UFUNCTION()
     void ShowAttackRange(AUnit* Unit);
 
@@ -161,53 +215,45 @@ public:
     UFUNCTION()
     bool TryAttackUnit(AUnit* AttackingUnit, AUnit* TargetUnit);
 
+    // -----------------
+    // References & Services
+    // -----------------
+
+    // Game instance reference
+    USaT_GameInstance* GameInstance;
+
     // Find unit at a specific grid position
     UFUNCTION()
     AUnit* FindUnitAtPosition(int32 GridX, int32 GridY);
 
-    // Helper method to handle clicks during the playing phase
-    void HandlePlayingPhaseClick(ATile* ClickedTile);
+    // Setter for GridManager
+    UFUNCTION(BlueprintCallable, Category = "Setup")
+    void SetGridManager(AGridManager* InGridManager) { GridManager = InGridManager; }
 
-    UFUNCTION(BlueprintCallable, Category = "Unit Selection")
-    void DeselectCurrentUnit();
+    // Setter for CurrentPhase
+    UFUNCTION(BlueprintCallable, Category = "Setup")
+    void SetCurrentPhase(EGamePhase InPhase) { CurrentPhase = InPhase; }
 
-    // Fase di gioco corrente
-    UPROPERTY(BlueprintReadOnly, Category = "Gameplay")
-    EGamePhase CurrentPhase;
-
-    // Numero di unità da piazzare
-    UPROPERTY(BlueprintReadOnly, Category = "Gameplay")
-    int32 UnitsToPlace;
-
-    UPROPERTY()
-    TArray<FVector2D> CurrentPath;
-
-    bool bHasPlacedSniper;
-    bool bHasPlacedBrawler;
-
-    UPROPERTY(BlueprintReadOnly, Category = "Gameplay")
-    bool IsMyTurn;
+    // Setter for UnitsToPlace
+    UFUNCTION(BlueprintCallable, Category = "Setup")
+    void SetUnitsToPlace(int32 InUnitsToPlace) { UnitsToPlace = InUnitsToPlace; }
 
 protected:
     virtual void BeginPlay() override;
 
-    // Riferimento al GameInstance
-    //UPROPERTY()
-    //USaT_GameInstance* GameInstance;
-
-    // Cella selezionata
+    // Selected cell
     int32 SelectedGridX;
     int32 SelectedGridY;
 
-    // Flag per sapere cosa stiamo facendo
-    // 0 = Seleziona cella
-    // 1 = Scegli tipo di unità (Sniper o Brawler)
+    // Selection state flag
+    // 0 = Select cell
+    // 1 = Choose unit type (Sniper or Brawler)
     int32 SelectionState;
 
-    // Ultima cella selezionata
+    // Last selected cell
     FVector LastSelectedCell;
 
-    // Riferimento al GridManager
+    // Reference to the GridManager
     UPROPERTY(BlueprintReadOnly, Category = "References")
     AGridManager* GridManager;
 };

@@ -1,5 +1,10 @@
 // Fill out your copyright notice in the Description page of Project Settings.
 
+/*
+ * AI player implementation for the strategy game
+ * Handles both random and strategic AI behavior based on difficulty setting
+ */
+
 #pragma once
 
 #include "CoreMinimal.h"
@@ -17,73 +22,128 @@ class STRATEGICO_A_TURNI_API ASaT_RandomPlayer : public APawn, public ISaT_Playe
     GENERATED_BODY()
 
 public:
+
+    // -----------------
+    // Core Game Functions
+    // -----------------
+
     // Sets default values for this pawn's properties
     ASaT_RandomPlayer();
 
-    // Existing properties
+    // Called when the game starts or when spawned
+    virtual void BeginPlay() override;
+
+    // Called every frame
+    virtual void Tick(float DeltaTime) override;
+
+    // ISaT_PlayerInterface implementation
+    virtual void OnTurn() override;
+    virtual void OnWin() override;
+    virtual void OnLose() override;
+    virtual void OnDraw() override;
+
+    // -----------------
+    // Units Configuration
+    // -----------------
+
+    // Unit class references
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Units")
     TSubclassOf<class ASniper> SniperClass;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Units")
     TSubclassOf<class ABrawler> BrawlerClass;
 
+    // Track unit placement count
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Game")
     int32 PlacedUnitsCount;
 
-    // References
-    UPROPERTY()
-    class AGridManager* GridManager;
+    // -----------------
+    // AI Turn Management
+    // -----------------
 
-    UPROPERTY()
-    class USaT_GameInstance* GameInstance;
-
-    // Unit-related properties
-    UPROPERTY()
-    TArray<AUnit*> AIUnits;
-
-    UPROPERTY()
-    int32 CurrentUnitIndex;
-
-protected:
-    // Called when the game starts or when spawned
-    virtual void BeginPlay() override;
-
-public:
-    // Called every frame
-    virtual void Tick(float DeltaTime) override;
-
-    // ISaT_PlayerInterface
-    virtual void OnTurn() override;
-    virtual void OnWin() override;
-    virtual void OnLose() override;
-    virtual void OnDraw() override;
-
-    // Game flow methods
+    // End the AI's turn
     void EndTurn();
+
+    // Place a random unit during setup phase
     void PlaceRandomUnit();
+
+    // Find a random empty cell on the grid
     bool FindRandomEmptyCell(int32& OutGridX, int32& OutGridY);
 
-    // AI behavior methods
-    void FindAllAIUnits();
-    void ProcessNextAIUnit();
-    void ProcessUnitActions(AUnit* Unit);
-    AUnit* FindAttackTarget(AUnit* AIUnit);
-    void MoveTowardPlayerUnit(AUnit* AIUnit);
-    AUnit* FindClosestPlayerUnit(AUnit* AIUnit);
-    FVector2D ReconstructPath(const TMap<FVector2D, FVector2D>& CameFrom,
-        FVector2D Current, FVector2D Start, int32 MaxSteps);
+    // -----------------
+    // AI Unit Processing
+    // -----------------
 
+    // Find all AI controlled units
+    void FindAllAIUnits();
+
+    // Process the next AI unit in sequence
+    void ProcessNextAIUnit();
+
+    // Process actions for a specific AI unit
+    void ProcessUnitActions(AUnit* Unit);
+
+    // -----------------
+    // AI Strategy - Basic
+    // -----------------
+
+    // Process unit actions with random behavior (Easy mode)
+    void ProcessUnitActionsRandom(AUnit* Unit);
+
+    // Find a random target to attack
+    AUnit* FindRandomAttackTarget(AUnit* AIUnit);
+
+    // Move the unit to a random valid position
+    bool MoveRandomly(AUnit* AIUnit);
+
+    // -----------------
+    // AI Strategy - Advanced
+    // -----------------
 
     // Process unit actions with strategic behavior (Hard mode)
     void ProcessUnitActionsStrategic(AUnit* Unit);
 
+    // Find a target to attack using strategic prioritization
+    AUnit* FindAttackTarget(AUnit* AIUnit);
+
+    // Move toward closest player unit using pathfinding
+    void MoveTowardPlayerUnit(AUnit* AIUnit);
+
+    // Find the closest player unit to the given AI unit
+    AUnit* FindClosestPlayerUnit(AUnit* AIUnit);
+
+    // -----------------
+    // Pathfinding Utilities
+    // -----------------
+
+    // Reconstruct path from A* search and get the best move within range
+    FVector2D ReconstructPath(const TMap<FVector2D, FVector2D>& CameFrom,
+        FVector2D Current, FVector2D Start, int32 MaxSteps);
+
     // Calculate Manhattan distance between two points
     int32 ManhattanDistance(const FVector2D& A, const FVector2D& B);
 
-    // Methods for different AI difficulties
-    void ProcessUnitActionsRandom(AUnit* Unit);
-    AUnit* FindRandomAttackTarget(AUnit* AIUnit);
-    bool MoveRandomly(AUnit* AIUnit);
-
+    // Check if a path is clear between two points
     bool IsPathClear(int32 StartX, int32 StartY, int32 EndX, int32 EndY);
+
+    // -----------------
+    // References & State
+    // -----------------
+
+    // Reference to grid manager
+    UPROPERTY()
+    class AGridManager* GridManager;
+
+    // Reference to game instance
+    UPROPERTY()
+    class USaT_GameInstance* GameInstance;
+
+    // List of AI units for processing
+    UPROPERTY()
+    TArray<AUnit*> AIUnits;
+
+    // Index of the current unit being processed
+    UPROPERTY()
+    int32 CurrentUnitIndex;
+
 };
