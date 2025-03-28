@@ -1,4 +1,4 @@
-Informazioni Base\n
+Informazioni Base
 ● 1vs1(Human Player versus AI). 
 
 Mappa di gioco
