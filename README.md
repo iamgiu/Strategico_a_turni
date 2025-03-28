@@ -68,7 +68,7 @@ This is a turn-based strategic game developed as a final project for the PAA cou
 # SetupPhase - Hard Mode
 ![image](https://github.com/user-attachments/assets/b270fa03-cb30-48b0-98a6-2b0ba5f8788e)
 
-# Movemente And Attack Widget - Hard Mode
+# Movement And Attack Widget - Hard Mode
 ![image](https://github.com/user-attachments/assets/2343d584-a7cd-4e74-a60d-a040c8a230cc)
 
 # Movemente Range - Hard Mode
